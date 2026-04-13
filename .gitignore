@@ -20,7 +20,8 @@ signing-key-base64.txt
 *.keystore
 *.jks
 keystore-base64.txt
-
+PROGRESS.md
+DECISIONS.md
 # librime and its dependencies
 app/src/main/jni/librime/
 app/src/main/jni/snappy/

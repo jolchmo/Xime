@@ -1,4 +1,4 @@
-name: Build APK (Test)
+name: Build and Test APK
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-and-test:
     runs-on: ubuntu-latest
     
     steps:
@@ -33,7 +33,7 @@ jobs:
         run: |
           sdkmanager "ndk;28.2.13676358"
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> $GITHUB_ENV
-          
+        
       - name: Cache CMake build
         uses: actions/cache@v4
         with:
@@ -48,5 +48,57 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
         
+      - name: Download ONNX Model Files from HuggingFace
+        run: |
+          chmod +x scripts/download_model.sh
+          scripts/download_model.sh
+        continue-on-error: true
+        
+      - name: Verify Model Files
+        run: |
+          echo "=== 检查模型文件 ==="
+          ls -lh plugins/prediction-onnx/src/main/assets/association_model/ || echo "模型目录不存在"
+          
+          # 检查关键文件
+          for file in model.onnx model.onnx.data model_int8_dynamic.onnx vocab.json vocab.txt; do
+            if [ -f "plugins/prediction-onnx/src/main/assets/association_model/$file" ]; then
+              SIZE=$(du -h "plugins/prediction-onnx/src/main/assets/association_model/$file" | cut -f1)
+              echo "✓ $file exists ($SIZE)"
+            else
+              echo "⚠ $file missing - plugin may work with reduced functionality"
+            fi
+          done
+          
+          echo ""
+          echo "总大小:"
+          du -sh plugins/prediction-onnx/src/main/assets/association_model/ || echo "目录不存在"
+        
+      - name: Run Unit Tests
+        run: ./gradlew :app:testDebugUnitTest --no-daemon
+        
+      - name: Generate Test Report
+        if: always()
+        uses: mikepenz/action-junit-report@v4
+        with:
+          report_paths: '**/build/test-results/testDebugUnitTest/*.xml'
+          fail_on_failure: true
+          
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-results
+          path: app/build/test-results/testDebugUnitTest/
+          retention-days: 7
+          
       - name: Build Debug APKs
         run: ./gradlew assembleDebug --no-daemon
+        
+      - name: Upload Debug APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-apks
+          path: |
+            app/build/outputs/apk/debug/*.apk
+            plugins/*/build/outputs/apk/debug/*.apk
+          retention-days: 7
