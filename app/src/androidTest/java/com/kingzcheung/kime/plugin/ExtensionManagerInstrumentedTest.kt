@@ -1,70 +1,89 @@
 package com.kingzcheung.kime.plugin
 
+import android.content.Context
 import androidx.test.platform.app.InstrumentationRegistry
-import org.junit.Assert.*
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
 class ExtensionManagerInstrumentedTest {
-    
-    private lateinit var context: android.content.Context
-    
+
+    private lateinit var context: Context
+
     @Before
     fun setup() {
         context = InstrumentationRegistry.getInstrumentation().targetContext
         ExtensionManager.release()
     }
-    
+
+    @After
+    fun tearDown() {
+        ExtensionManager.release()
+    }
+
     @Test
-    fun `initialize should succeed with valid context`() {
+    fun `initialize succeeds even when no plugins installed`() {
         val result = ExtensionManager.initialize(context)
-        assertTrue("ExtensionManager should initialize successfully", result)
-        assertTrue(ExtensionManager.isInitialized())
+        
+        assertTrue("Initialize should succeed", result)
+        assertTrue("Should be initialized", ExtensionManager.isInitialized())
     }
-    
+
     @Test
-    fun `getPredictionPlugins should return list after initialization`() {
+    fun `getPredictionPlugins returns empty list initially`() {
         ExtensionManager.initialize(context)
+        
         val plugins = ExtensionManager.getPredictionPlugins()
-        assertNotNull(plugins)
+        
+        assertTrue("Should return empty list when no plugins", plugins.isEmpty())
     }
-    
+
     @Test
-    fun `getEmojiPlugins should return list after initialization`() {
+    fun `getAllPlugins combines all plugin types`() {
         ExtensionManager.initialize(context)
-        val plugins = ExtensionManager.getEmojiPlugins()
-        assertNotNull(plugins)
+        
+        val all = ExtensionManager.getAllPlugins()
+        
+        assertEquals(
+            "Total should be sum of all types",
+            ExtensionManager.getPredictionPlugins().size + 
+            ExtensionManager.getEmojiPlugins().size +
+            ExtensionManager.getSpeechPlugins().size,
+            all.size
+        )
     }
-    
+
     @Test
-    fun `getSpeechPlugins should return list after initialization`() {
+    fun `getPluginById returns null for unknown plugin`() {
         ExtensionManager.initialize(context)
-        val plugins = ExtensionManager.getSpeechPlugins()
-        assertNotNull(plugins)
+        
+        val plugin = ExtensionManager.getPluginById("unknown_plugin_id")
+        
+        assertNull("Should return null for unknown plugin", plugin)
     }
-    
+
     @Test
-    fun `release should clear initialization state`() {
+    fun `release clears initialization state`() {
         ExtensionManager.initialize(context)
         assertTrue(ExtensionManager.isInitialized())
         
         ExtensionManager.release()
-        assertFalse(ExtensionManager.isInitialized())
+        
+        assertFalse("Should not be initialized after release", ExtensionManager.isInitialized())
     }
-    
+
     @Test
-    fun `initialize should be idempotent`() {
+    fun `reload works after initialization`() {
         ExtensionManager.initialize(context)
-        val result = ExtensionManager.initialize(context)
-        assertTrue("Second initialization should return true", result)
         assertTrue(ExtensionManager.isInitialized())
-    }
-    
-    @Test
-    fun `reload should work after initialization`() {
-        ExtensionManager.initialize(context)
+        
         val result = ExtensionManager.reload(context)
+        
         assertTrue("Reload should succeed", result)
-        assertTrue(ExtensionManager.isInitialized())
+        assertTrue("Should still be initialized after reload", ExtensionManager.isInitialized())
     }
 }

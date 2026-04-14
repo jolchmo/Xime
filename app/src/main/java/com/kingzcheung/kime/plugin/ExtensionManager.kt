@@ -18,6 +18,7 @@ object ExtensionManager {
     private val emojiPlugins = mutableListOf<EmojiPlugin>()
     private val speechPlugins = mutableListOf<SpeechPlugin>()
     private var isInitialized = false
+    internal var pluginLoader: (Context) -> List<PluginMetadata> = { ExtensionLoader.loadPlugins(it) }
     
     fun initialize(context: Context): Boolean {
         if (isInitialized) {
@@ -28,7 +29,7 @@ object ExtensionManager {
         Log.d(TAG, "Initializing ExtensionManager...")
         
         try {
-            val plugins = ExtensionLoader.loadPlugins(context)
+            val plugins = pluginLoader(context)
             
             plugins.forEach { plugin ->
                 when (plugin) {
@@ -69,7 +70,7 @@ object ExtensionManager {
     }
     
     fun scanNewPlugins(context: Context): Boolean {
-        val plugins = ExtensionLoader.loadPlugins(context)
+        val plugins = pluginLoader(context)
         
         val currentPredictionIds = plugins.filterIsInstance<PredictionPlugin>().map { it.id }.toSet()
         val currentEmojiIds = plugins.filterIsInstance<EmojiPlugin>().map { it.id }.toSet()
@@ -248,5 +249,9 @@ object ExtensionManager {
     
     fun getAllPlugins(): List<PluginMetadata> {
         return predictionPlugins + emojiPlugins + speechPlugins
+    }
+
+    internal fun resetPluginLoaderForTests() {
+        pluginLoader = { ExtensionLoader.loadPlugins(it) }
     }
 }

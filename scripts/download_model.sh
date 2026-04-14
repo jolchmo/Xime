@@ -5,7 +5,7 @@
 
 set -e
 
-MODEL_DIR="plugins/prediction-onnx/src/main/assets/association_model"
+MODEL_DIR="plugins/prediction-onnx/src/main/assets"
 HF_MODEL="rkingzhong/predictive-text-small"
 HF_BASE_URL="https://huggingface.co/${HF_MODEL}/resolve/main"
 

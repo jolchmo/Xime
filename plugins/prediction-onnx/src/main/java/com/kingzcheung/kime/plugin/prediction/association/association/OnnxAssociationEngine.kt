@@ -11,7 +11,6 @@ import java.util.zip.ZipFile
 
 object OnnxAssociationEngine {
     private const val TAG = "OnnxAssociationEngine"
-    private const val MODEL_DIR = "association_model"
     
     private var vocab: Map<String, Int> = emptyMap()
     private var id2word: Map<Int, String> = emptyMap()
@@ -22,7 +21,7 @@ object OnnxAssociationEngine {
 
         try {
             val mainAppFilesDir = File("/data/data/com.kingzcheung.kime/files")
-            val modelDir = File(mainAppFilesDir, MODEL_DIR)
+            val modelDir = mainAppFilesDir
             
             modelDir.mkdirs()
             
@@ -52,7 +51,7 @@ object OnnxAssociationEngine {
                             }
                             Log.d(TAG, "Extracted $fileName via assets (${targetFile.length()} bytes)")
                         } catch (e: Exception) {
-                            Log.e(TAG, "Failed to extract $fileName", e)
+                            Log.e(TAG, "Failed to extract $fileName from assets", e)
                             return false
                         }
                     }

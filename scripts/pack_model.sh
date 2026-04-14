@@ -5,8 +5,8 @@
 
 set -e
 
-MODEL_DIR="plugins/prediction-onnx/src/main/assets/association_model"
-OUTPUT_FILE="association_model.tar.gz"
+MODEL_DIR="plugins/prediction-onnx/src/main/assets"
+OUTPUT_FILE="prediction_model.tar.gz"
 
 echo "=== 打包模型文件 ==="
 
@@ -45,16 +45,13 @@ echo "正在创建压缩包..."
 
 # 创建临时目录结构
 TMP_DIR=$(mktemp -d)
-mkdir -p "$TMP_DIR/association_model"
+mkdir -p "$TMP_DIR/prediction_model"
 
-# 复制文件
-cp -v "$MODEL_DIR"/*.onnx "$TMP_DIR/association_model/"
-cp -v "$MODEL_DIR"/*.onnx.data "$TMP_DIR/association_model/" || true
-cp -v "$MODEL_DIR"/vocab.json "$TMP_DIR/association_model/"
+cp -v "$MODEL_DIR"/*.onnx "$TMP_DIR/prediction_model/"
+cp -v "$MODEL_DIR"/*.onnx.data "$TMP_DIR/prediction_model/" || true
+cp -v "$MODEL_DIR"/vocab.json "$TMP_DIR/prediction_model/"
 
-# 创建压缩包
-cd "$TMP_DIR"
-tar -czf "$OUTPUT_FILE" association_model/
+tar -czf "$OUTPUT_FILE" prediction_model/
 
 # 移动到脚本目录
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

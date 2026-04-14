@@ -26,7 +26,7 @@ prediction-onnx 插件需要 ONNX 模型文件才能工作，但这些文件体�
 ./scripts/download_model.sh
 
 # 验证文件
-ls -lh plugins/prediction-onnx/src/main/assets/association_model/
+ls -lh plugins/prediction-onnx/src/main/assets/
 ```
 
 #### GitHub Actions 构建
@@ -53,7 +53,7 @@ ls -lh plugins/prediction-onnx/src/main/assets/association_model/
    - `model_int8_dynamic.onnx`
    - `vocab.json`
    - `vocab.txt`
-4. 放入目录：`plugins/prediction-onnx/src/main/assets/association_model/`
+4. 放入目录：`plugins/prediction-onnx/src/main/assets/`
 
 ## 文件说明
 
