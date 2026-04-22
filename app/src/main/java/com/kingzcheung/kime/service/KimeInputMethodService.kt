@@ -59,36 +59,6 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileInputStream
 
-data class InputUIState(
-    val candidates: Array<String> = emptyArray(),
-    val candidateComments: Array<String> = emptyArray(),
-    val inputText: String = "",
-    val isComposing: Boolean = false,
-    val isAsciiMode: Boolean = false,
-    val schemaName: String = "",
-    val currentSchemaId: String = "",
-    val schemas: List<com.kingzcheung.kime.settings.SchemaInfo> = emptyList(),
-    val enterKeyText: String = "发送",
-    val darkMode: Int = 0,
-    val themeId: String = "ocean_blue",
-    val showBottomButtons: Boolean = false,
-    val associationCandidates: Array<String> = emptyArray(),
-    val associationEnabled: Boolean = false,
-    val isVoiceMode: Boolean = false,
-    val voiceButtonState: VoiceButtonState = VoiceButtonState(),
-    val voicePluginName: String = "",
-    val voiceRecognitionState: RecognitionState = RecognitionState.IDLE,
-    val voiceRecognizedText: String = "",
-    val voiceAmplitude: Float = 0f,
-    val pendingEnglishText: String = ""
-)
-
-data class VoiceButtonState(
-    val bottomActive: Boolean = false,  // 底部按钮是否激活（白色）
-    val leftActive: Boolean = false,    // 左按钮是否激活（白色）
-    val rightActive: Boolean = false    // 右按钮是否激活（白色）
-)
-
 /**
  * Kime 输入法服务
  * 使用 Jetpack Compose 构建输入法 UI
