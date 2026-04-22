@@ -37,6 +37,7 @@ import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.kingzcheung.kime.MainActivity
 import com.kingzcheung.kime.association.AssociationManager
+import com.kingzcheung.kime.association.AssociationService
 import com.kingzcheung.kime.clipboard.ClipboardManager
 import com.kingzcheung.kime.plugin.ExtensionManager
 import com.kingzcheung.kime.speech.RecognitionState
@@ -78,7 +79,8 @@ data class InputUIState(
     val voicePluginName: String = "",
     val voiceRecognitionState: RecognitionState = RecognitionState.IDLE,
     val voiceRecognizedText: String = "",
-    val voiceAmplitude: Float = 0f
+    val voiceAmplitude: Float = 0f,
+    val pendingEnglishText: String = ""
 )
 
 data class VoiceButtonState(
@@ -340,14 +342,18 @@ override fun onCreate() {
         uiState.value = uiState.value.copy(voiceAmplitude = amplitude)
     }
     
-/**
-     * 初始化插件系统（包括联想插件）
-     */
-    private fun initAssociationEngine() {
-        FileLogger.i(TAG, "Initializing plugin system")
+private fun initAssociationEngine() {
+        FileLogger.i(TAG, "Initializing association system")
         
         serviceScope.launch(Dispatchers.IO) {
             try {
+                val trieInit = AssociationService.initialize(this@KimeInputMethodService)
+                if (trieInit) {
+                    FileLogger.i(TAG, "Trie association service initialized")
+                } else {
+                    FileLogger.w(TAG, "Trie association service initialization failed")
+                }
+                
                 if (!ExtensionManager.isInitialized()) {
                     FileLogger.d(TAG, "ExtensionManager not initialized, initializing...")
                     ExtensionManager.initialize(this@KimeInputMethodService)
@@ -366,7 +372,7 @@ override fun onCreate() {
                     }
                 }
             } catch (e: Exception) {
-                FileLogger.e(TAG, "Failed to initialize ExtensionManager: ${e.message}")
+                FileLogger.e(TAG, "Failed to initialize association system: ${e.message}")
             }
         }
     }
@@ -602,12 +608,42 @@ private fun getPredictionFromPlugin(contextText: String) {
                                 @Suppress("DEPRECATION")
                                 imm.showInputMethodPicker()
                             },
-                            associationCandidates = state.associationCandidates,
+                            associationCandidates = if (state.pendingEnglishText.isNotEmpty()) {
+                                arrayOf(state.pendingEnglishText) + state.associationCandidates
+                            } else {
+                                state.associationCandidates
+                            },
                             onAssociationSelect = { index ->
-                                if (index >= 0 && index < state.associationCandidates.size) {
-                                    val text = state.associationCandidates[index]
-                                    commitText(text)
-                                    updateUI()
+                                val adjustedCandidates = if (state.pendingEnglishText.isNotEmpty()) {
+                                    arrayOf(state.pendingEnglishText) + state.associationCandidates
+                                } else {
+                                    state.associationCandidates
+                                }
+                                
+                                if (index >= 0 && index < adjustedCandidates.size) {
+                                    val text = adjustedCandidates[index]
+                                    val pendingEnglish = state.pendingEnglishText
+                                    
+                                    if (pendingEnglish.isNotEmpty()) {
+                                        if (index == 0 && text == pendingEnglish) {
+                                            uiState.value = uiState.value.copy(
+                                                pendingEnglishText = "",
+                                                associationCandidates = emptyArray()
+                                            )
+                                            Log.d(TAG, "Confirmed pending English: '$text'")
+                                        } else {
+                                            currentInputConnection?.deleteSurroundingText(pendingEnglish.length, 0)
+                                            commitText(text)
+                                            uiState.value = uiState.value.copy(
+                                                pendingEnglishText = "",
+                                                associationCandidates = emptyArray()
+                                            )
+                                            Log.d(TAG, "Replaced '$pendingEnglish' with association: '$text'")
+                                        }
+                                    } else {
+                                        commitText(text)
+                                        updateUI()
+                                    }
                                 }
                             },
                             onCommitImage = { imagePath ->
@@ -926,38 +962,59 @@ private fun getPredictionFromPlugin(contextText: String) {
      val inputText = rimeEngine.getInput()
      val candidatesWithComments = rimeEngine.getCandidatesWithComments()
      
-     uiState.value = uiState.value.copy(
-         inputText = inputText,
-         candidates = candidatesWithComments.map { it.text }.toTypedArray(),
-         candidateComments = candidatesWithComments.map { it.comment }.toTypedArray(),
-         isComposing = inputText.isNotEmpty(),
-         isAsciiMode = rimeEngine.isAsciiMode(),
-         associationCandidates = emptyArray()
-     )
-     
-// 联想预测只在已上屏文本存在且没有正在输入编码时触发
-      // 正确逻辑：只有上屏后才应该显示联想词
-  if (SettingsPreferences.isSmartPredictionEnabled(this) && inputText.isEmpty() && lastCommittedText.isNotEmpty()) {
-           serviceScope.launch {
-               try {
-                   if (!AssociationManager.isInitialized()) {
-                       Log.d(TAG, "AssociationManager not initialized in updateUI, initializing...")
-                       AssociationManager.initialize(this@KimeInputMethodService)
-                   }
-                   
-                   Log.d(TAG, "Predicting association for lastCommittedText='$lastCommittedText'")
-                   
-                   val candidates = AssociationManager.predict(lastCommittedText, 5)
-                   
-                   Log.d(TAG, "Association candidates: ${candidates.map { it.text }}")
-                   withContext(Dispatchers.Main) {
-                       uiState.value = uiState.value.copy(associationCandidates = candidates.map { it.text }.toTypedArray())
-                   }
-               } catch (e: Exception) {
-                   Log.e(TAG, "Association prediction failed", e)
-               }
-           }
-       }
+uiState.value = uiState.value.copy(
+          inputText = inputText,
+          candidates = candidatesWithComments.map { it.text }.toTypedArray(),
+          candidateComments = candidatesWithComments.map { it.comment }.toTypedArray(),
+          isComposing = inputText.isNotEmpty(),
+          isAsciiMode = rimeEngine.isAsciiMode(),
+          associationCandidates = emptyArray()
+      )
+      
+      val pendingEnglish = uiState.value.pendingEnglishText
+      
+      if (pendingEnglish.isNotEmpty()) {
+          serviceScope.launch {
+              try {
+                  val candidates = AssociationService.getAssociations(
+                      this@KimeInputMethodService,
+                      pendingEnglish,
+                      true,
+                      5
+                  )
+                  
+                  Log.d(TAG, "English association for pending '$pendingEnglish': ${candidates.joinToString()}")
+                  withContext(Dispatchers.Main) {
+                      uiState.value = uiState.value.copy(associationCandidates = candidates.toTypedArray())
+                  }
+              } catch (e: Exception) {
+                  Log.e(TAG, "English association failed", e)
+              }
+          }
+      } else if (SettingsPreferences.isSmartPredictionEnabled(this) && inputText.isEmpty() && lastCommittedText.isNotEmpty()) {
+          val isAscii = rimeEngine.isAsciiMode()
+          if (!isAscii) {
+              serviceScope.launch {
+                  try {
+                      if (!AssociationManager.isInitialized()) {
+                          Log.d(TAG, "AssociationManager not initialized, initializing...")
+                          AssociationManager.initialize(this@KimeInputMethodService)
+                      }
+                      
+                      Log.d(TAG, "Chinese association for '$lastCommittedText'")
+                      
+                      val candidates = AssociationManager.predict(lastCommittedText, 5)
+                      
+                      Log.d(TAG, "Chinese association candidates: ${candidates.map { it.text }}")
+                      withContext(Dispatchers.Main) {
+                          uiState.value = uiState.value.copy(associationCandidates = candidates.map { it.text }.toTypedArray())
+                      }
+                  } catch (e: Exception) {
+                      Log.e(TAG, "Chinese association failed", e)
+                  }
+              }
+          }
+      }
   }
     
     private fun updateSchemaName() {
@@ -978,28 +1035,35 @@ private fun getPredictionFromPlugin(contextText: String) {
             
             when (key) {
                 "delete" -> {
-                    if (state.isComposing || state.inputText.isNotEmpty()) {
-                        // 第一步：删除编码字符
+                    val pendingEnglish = state.pendingEnglishText
+                    
+                    if (pendingEnglish.isNotEmpty()) {
+                        val newPending = pendingEnglish.dropLast(1)
+                        withContext(Dispatchers.Main) {
+                            sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
+                            uiState.value = uiState.value.copy(
+                                pendingEnglishText = newPending,
+                                associationCandidates = emptyArray()
+                            )
+                        }
+                        needsUIUpdate = true
+                        Log.d(TAG, "Delete English pending: '$newPending'")
+                    } else if (state.isComposing || state.inputText.isNotEmpty()) {
                         rimeEngine.processKey(0xff08, 0)
                         
-                        // 检查编码是否已清空
                         val currentInput = rimeEngine.getInput()
                         if (currentInput.isEmpty()) {
-                            // 第二步：编码清空后，清空候选词栏
                             rimeEngine.clearComposition()
                             Log.d(TAG, "Delete: encoding cleared, cleared composition and candidates")
                         }
                         
                         needsUIUpdate = true
                     } else {
-                        // 第三步：没有编码时，删除输入框的已上屏文本
-                        // 同时清空候选词栏（包括联想词）
                         if (lastCommittedText.isNotEmpty()) {
                             lastCommittedText = lastCommittedText.dropLast(1)
                             Log.d(TAG, "Delete committed text, remaining: '$lastCommittedText'")
                         }
                         
-                        // 清空候选词栏
                         uiState.value = uiState.value.copy(
                             candidates = emptyArray(),
                             candidateComments = emptyArray(),
@@ -1012,15 +1076,15 @@ private fun getPredictionFromPlugin(contextText: String) {
                     }
                 }
                 "clear_composition" -> {
-                    // 上滑清空：清空编码、候选词栏和联想词
                     rimeEngine.clearComposition()
                     uiState.value = uiState.value.copy(
                         candidates = emptyArray(),
                         candidateComments = emptyArray(),
-                        associationCandidates = emptyArray()
+                        associationCandidates = emptyArray(),
+                        pendingEnglishText = ""
                     )
                     needsUIUpdate = true
-                    Log.d(TAG, "Clear composition: cleared encoding, candidates and association candidates")
+                    Log.d(TAG, "Clear composition: cleared all")
                 }
                 "enter" -> {
                     if (state.isComposing) {
@@ -1051,8 +1115,18 @@ private fun getPredictionFromPlugin(contextText: String) {
                     }
                 }
                 "space" -> {
-                    if (state.isComposing) {
-                        // 有编码时：空格键上屏第一个候选词或编码
+                    val pendingEnglish = state.pendingEnglishText
+                    
+                    if (pendingEnglish.isNotEmpty()) {
+                        withContext(Dispatchers.Main) {
+                            commitText(" ")
+                            uiState.value = uiState.value.copy(
+                                pendingEnglishText = "",
+                                associationCandidates = emptyArray()
+                            )
+                        }
+                        Log.d(TAG, "Space: added space after pending English '$pendingEnglish'")
+                    } else if (state.isComposing) {
                         if (state.candidates.isNotEmpty()) {
                             selectCandidateAsync(0)
                         } else {
@@ -1066,7 +1140,6 @@ private fun getPredictionFromPlugin(contextText: String) {
                             }
                         }
                     } else {
-                        // 没有编码时：直接输入空格（联想词只能通过点选上屏，不能用空格键）
                         withContext(Dispatchers.Main) {
                             commitText(" ")
                         }
@@ -1089,9 +1162,20 @@ private fun getPredictionFromPlugin(contextText: String) {
                     }
                 }
                 else -> {
+                    val pendingEnglish = state.pendingEnglishText
+                    
                     if (key.matches(Regex("[0-9]")) ||
                         key in listOf("-", "/", ":", ";", "(", ")", "@", "\"", "'", "#", ".", ",", "!", "?", "，", "。")) {
-                        if (state.isComposing) {
+                        if (pendingEnglish.isNotEmpty()) {
+                            withContext(Dispatchers.Main) {
+                                commitText(key)
+                                uiState.value = uiState.value.copy(
+                                    pendingEnglishText = "",
+                                    associationCandidates = emptyArray()
+                                )
+                            }
+                            Log.d(TAG, "Symbol: added '$key' after pending English '$pendingEnglish'")
+                        } else if (state.isComposing) {
                             val committedText = rimeEngine.commit()
                             if (committedText.isNotEmpty()) {
                                 withContext(Dispatchers.Main) {
@@ -1100,9 +1184,13 @@ private fun getPredictionFromPlugin(contextText: String) {
                             }
                             rimeEngine.clearComposition()
                             needsUIUpdate = true
-                        }
-                        withContext(Dispatchers.Main) {
-                            commitText(key)
+                            withContext(Dispatchers.Main) {
+                                commitText(key)
+                            }
+                        } else {
+                            withContext(Dispatchers.Main) {
+                                commitText(key)
+                            }
                         }
                     } else {
                         val char = if (isShifted) key.uppercase() else key
@@ -1122,9 +1210,26 @@ private fun getPredictionFromPlugin(contextText: String) {
                                 needsUIUpdate = true
                             }
                         } else {
+                            val isAscii = state.isAsciiMode
                             if (!state.isComposing) {
-                                withContext(Dispatchers.Main) {
-                                    commitText(char)
+                                if (isAscii) {
+                                    val currentPending = uiState.value.pendingEnglishText
+                                    val newPending = currentPending + char.lowercase()
+                                    
+                                    withContext(Dispatchers.Main) {
+                                        commitText(char.lowercase())
+                                        uiState.value = uiState.value.copy(
+                                            pendingEnglishText = newPending,
+                                            associationCandidates = emptyArray()
+                                        )
+                                    }
+                                    
+                                    needsUIUpdate = true
+                                    Log.d(TAG, "English mode: committed '$char', pending text '$newPending'")
+                                } else {
+                                    withContext(Dispatchers.Main) {
+                                        commitText(char)
+                                    }
                                 }
                             }
                         }
