@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.twotone.Assignment
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.DarkMode
@@ -22,6 +23,18 @@ import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Height
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.twotone.Assignment
+import androidx.compose.material.icons.twotone.Bolt
+import androidx.compose.material.icons.twotone.BorderTop
+import androidx.compose.material.icons.twotone.DarkMode
+import androidx.compose.material.icons.twotone.ElectricBolt
+import androidx.compose.material.icons.twotone.EmojiEmotions
+import androidx.compose.material.icons.twotone.Keyboard
+import androidx.compose.material.icons.twotone.LightMode
+import androidx.compose.material.icons.twotone.Quickreply
+import androidx.compose.material.icons.twotone.Rotate90DegreesCcw
+import androidx.compose.material.icons.twotone.Settings
+import androidx.compose.material.icons.twotone.SettingsOverscan
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -64,16 +77,15 @@ fun MenuBar(
     val itemBgColor = if (isDarkTheme) Color(0xFF45474A) else Color.White
     
     val menuItems = listOf(
-        MenuItem(rememberVectorPainter(Icons.Default.ContentPaste), "剪贴板", onClipboard),
-        MenuItem(rememberVectorPainter(Icons.Default.Bolt), "快捷发送", onQuickSend),
-        MenuItem(rememberVectorPainter(Icons.Default.Height), "键盘调节", onKeyboardResize),
-        MenuItem(rememberVectorPainter(Icons.Default.EmojiEmotions), "表情", onEmoji),
-        MenuItem(rememberVectorPainter(if (isDarkTheme) Icons.Default.LightMode else Icons.Default.DarkMode), if (isDarkTheme) "浅色模式" else "深色模式", onToggleDarkMode),
-        MenuItem(rememberVectorPainter(Icons.Default.Refresh), "部署方案", onReloadConfig),
-        MenuItem(rememberVectorPainter(Icons.Default.Keyboard), "输入方案", onSchemaList),
-        MenuItem(rememberVectorPainter(Icons.Default.Settings), "设置", onSettings)
+        MenuItem(rememberVectorPainter(Icons.AutoMirrored.TwoTone.Assignment), "剪贴板", onClipboard),
+        MenuItem(rememberVectorPainter(Icons.TwoTone.Quickreply), "快捷发送", onQuickSend),
+        MenuItem(rememberVectorPainter(Icons.TwoTone.SettingsOverscan), "键盘调节", onKeyboardResize),
+        MenuItem(rememberVectorPainter(Icons.TwoTone.EmojiEmotions), "表情", onEmoji),
+        MenuItem(rememberVectorPainter(if (isDarkTheme) Icons.TwoTone.LightMode else Icons.TwoTone.DarkMode), if (isDarkTheme) "浅色模式" else "深色模式", onToggleDarkMode),
+        MenuItem(rememberVectorPainter(Icons.TwoTone.Rotate90DegreesCcw), "部署方案", onReloadConfig),
+        MenuItem(rememberVectorPainter(Icons.TwoTone.Keyboard), "输入方案", onSchemaList),
+        MenuItem(rememberVectorPainter(Icons.TwoTone.Settings), "设置", onSettings)
     )
-    
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -82,33 +94,29 @@ fun MenuBar(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Row(
+        // 将8个项目排布在网格中，使用Grid-like布局
+        Column(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            menuItems.take(4).forEach { item ->
-                MenuItemButton(
-                    item = item,
-                    bgColor = itemBgColor,
-                    textColor = textColor,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-        }
-        
-        Spacer(modifier = Modifier.height(12.dp))
-        
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            menuItems.drop(4).forEach { item ->
-                MenuItemButton(
-                    item = item,
-                    bgColor = itemBgColor,
-                    textColor = textColor,
-                    modifier = Modifier.weight(1f)
-                )
+            menuItems.chunked(4).forEach { rowItems ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    rowItems.forEach { item ->
+                        MenuItemButton(
+                            item = item,
+                            bgColor = itemBgColor,
+                            textColor = textColor,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    // 如果该行不足4个，填充空的Box以保持对齐
+                    repeat(4 - rowItems.size) {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                }
             }
         }
     }
@@ -134,7 +142,7 @@ fun MenuItemButton(
         Icon(
             painter = item.icon,
             contentDescription = item.label,
-            tint = textColor,
+            tint = textColor.copy(alpha = 0.7f),  // 让图标颜色更浅一些
             modifier = Modifier.size(24.dp)
         )
         Spacer(modifier = Modifier.height(4.dp))

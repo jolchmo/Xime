@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.twotone.LibraryBooks
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.AddBox
@@ -36,6 +37,19 @@ import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Vibration
 import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.twotone.AutoAwesome
+import androidx.compose.material.icons.twotone.Extension
+import androidx.compose.material.icons.twotone.GraphicEq
+import androidx.compose.material.icons.twotone.Info
+import androidx.compose.material.icons.twotone.Keyboard
+import androidx.compose.material.icons.twotone.KeyboardAlt
+import androidx.compose.material.icons.twotone.LibraryBooks
+import androidx.compose.material.icons.twotone.Mic
+import androidx.compose.material.icons.twotone.Palette
+import androidx.compose.material.icons.twotone.Straighten
+import androidx.compose.material.icons.twotone.ToggleOn
+import androidx.compose.material.icons.twotone.Vibration
+import androidx.compose.material.icons.twotone.Visibility
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -61,6 +75,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -221,10 +236,12 @@ fun SettingsMainContent(
         topBar = {
             MediumTopAppBar(
                 title = { Text("Kime 设置") },
-                colors = TopAppBarDefaults.mediumTopAppBarColors(
+                colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background,
+                    navigationIconContentColor = Color.Unspecified,
                     titleContentColor = MaterialTheme.colorScheme.onBackground,
-                    scrolledContainerColor = MaterialTheme.colorScheme.background
+                    actionIconContentColor = Color.Unspecified
                 ),
                 scrollBehavior = scrollBehavior
             )
@@ -241,7 +258,7 @@ fun SettingsMainContent(
             item {
                 SettingsSection(title = "输入法设置", content = {
                     SettingsItem(
-                        icon = Icons.Outlined.Keyboard,
+                        icon = Icons.TwoTone.Keyboard,
                         title = "启用输入法",
                         subtitle = "在系统设置中启用 Kime 输入法",
                         onClick = {
@@ -255,7 +272,7 @@ fun SettingsMainContent(
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     )
                     SettingsItem(
-                        icon = Icons.Outlined.Language,
+                        icon = Icons.TwoTone.ToggleOn,
                         title = "选择输入法",
                         subtitle = "将 Kime 设为当前输入法",
                         onClick = {
@@ -319,7 +336,7 @@ fun SettingsMainContent(
                     var showBottomButtons by remember { mutableStateOf(SettingsPreferences.showBottomButtons(context)) }
                     
                     SettingsItem(
-                        icon = Icons.Outlined.KeyboardAlt,
+                        icon = Icons.TwoTone.KeyboardAlt,
                         title = "输入方案",
                         subtitle = "管理输入方案",
                         onClick = onNavigateToSchema,
@@ -331,7 +348,7 @@ fun SettingsMainContent(
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     )
                     SettingsItem(
-                        icon = Icons.Outlined.Palette,
+                        icon = Icons.TwoTone.Palette,
                         title = "主题与定制",
                         subtitle = "自定义外观和样式",
                         onClick = onNavigateToTheme,
@@ -343,7 +360,7 @@ fun SettingsMainContent(
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     )
                     SettingsItem(
-                        icon = Icons.Outlined.Vibration,
+                        icon = Icons.TwoTone.Vibration,
                         title = "按键效果",
                         subtitle = "按键音效和振动反馈",
                         onClick = onNavigateToKeyEffect,
@@ -355,7 +372,7 @@ fun SettingsMainContent(
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     )
                     SettingsToggleItem(
-                        icon = Icons.Outlined.Visibility,
+                        icon = Icons.TwoTone.Straighten,
                         title = "显示底部按钮",
                         subtitle = "显示收回键盘和切换输入法按钮（部分系统自带）",
                         checked = showBottomButtons,
@@ -371,7 +388,7 @@ fun SettingsMainContent(
                     )
                     
                     SettingsItem(
-                        icon = Icons.Outlined.Book,
+                        icon = Icons.AutoMirrored.TwoTone.LibraryBooks,
                         title = "词库管理",
                         subtitle = "管理用户词库",
                         onClick = onNavigateToDictionary,
@@ -383,7 +400,7 @@ fun SettingsMainContent(
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     )
                     SettingsItem(
-                        icon = Icons.Outlined.AutoAwesome,
+                        icon = Icons.TwoTone.AutoAwesome,
                         title = "智能联想",
                         subtitle = "基于 AI 模型的智能联想词预测",
                         onClick = onNavigateToSmartPrediction,
@@ -395,7 +412,7 @@ fun SettingsMainContent(
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     )
                     SettingsItem(
-                        icon = Icons.Outlined.Mic,
+                        icon = Icons.TwoTone.GraphicEq,
                         title = "语音转文本",
                         subtitle = "在线 ASR 服务和本地模型管理",
                         onClick = onNavigateToSpeechToText,
@@ -407,7 +424,7 @@ fun SettingsMainContent(
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     )
                     SettingsItem(
-                        icon = Icons.Outlined.AddBox,
+                        icon = Icons.TwoTone.Extension,
                         title = "插件管理",
                         subtitle = "管理已安装的插件",
                         onClick = onNavigateToPlugins,
@@ -419,7 +436,7 @@ fun SettingsMainContent(
             item {
                 SettingsSection(title = "关于", content = {
                     SettingsItem(
-                        icon = Icons.Outlined.Info,
+                        icon = Icons.TwoTone.Info,
                         title = "关于 Kime",
                         subtitle = "版本信息、开发者、联系方式",
                         onClick = onNavigateToAbout,

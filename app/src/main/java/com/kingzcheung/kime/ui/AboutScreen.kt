@@ -20,12 +20,18 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.automirrored.twotone.OpenInNew
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PrivacyTip
+import androidx.compose.material.icons.twotone.BugReport
+import androidx.compose.material.icons.twotone.Code
+import androidx.compose.material.icons.twotone.Description
+import androidx.compose.material.icons.twotone.PersonOutline
+import androidx.compose.material.icons.twotone.PrivacyTip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -226,7 +232,7 @@ fun AboutContent(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Person,
+                                imageVector = Icons.TwoTone.PersonOutline,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.primary
                             )
@@ -244,7 +250,7 @@ fun AboutContent(
                                 )
                             }
                             Icon(
-                                imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                                imageVector = Icons.AutoMirrored.TwoTone.OpenInNew,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(18.dp)
@@ -271,7 +277,7 @@ fun AboutContent(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Code,
+                            imageVector = Icons.TwoTone.Code,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary
                         )
@@ -291,7 +297,8 @@ fun AboutContent(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.OpenInNew,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp)
                         )
                     }
                 }
@@ -306,7 +313,7 @@ fun AboutContent(
                 ) {
                     Column {
                         SettingsItem(
-                            icon = Icons.Default.PrivacyTip,
+                            icon = Icons.TwoTone.PrivacyTip,
                             title = "隐私策略",
                             onClick = onNavigateToPrivacy
                         )
@@ -316,7 +323,7 @@ fun AboutContent(
                             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                         )
                         SettingsItem(
-                            icon = Icons.Default.Description,
+                            icon = Icons.TwoTone.Description,
                             title = "开源许可证",
                             onClick = onNavigateToLicenses
                         )
@@ -326,7 +333,7 @@ fun AboutContent(
                             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                         )
                         SettingsItem(
-                            icon = Icons.Default.BugReport,
+                            icon = Icons.TwoTone.BugReport,
                             title = "日志查看器",
                             onClick = onNavigateToLogViewer
                         )
