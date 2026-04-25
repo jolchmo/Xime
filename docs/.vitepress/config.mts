@@ -23,8 +23,14 @@ export default defineConfig({
         {
           text: '功能',
           items: [
-            { text: '智能联想', link: '/smart-prediction' },
-            { text: '语音转文本', link: '/speech-to-text' }
+            { text: '智能联想', link: '/features/smart-prediction' },
+            { text: '语音转文本', link: '/features/speech-to-text' },
+            { text: '剪贴板', link: '/features/clipboard' },
+            { text: '快捷发送', link: '/features/quick-send' },
+            { text: '键盘调节', link: '/features/keyboard-adjustment' },
+            { text: '表情', link: '/features/emoji' },
+            { text: '部署方案', link: '/features/deployment' },
+            { text: '输入方案', link: '/features/input-scheme' }
           ]
         },
         {
