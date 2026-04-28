@@ -51,3 +51,4 @@ plugins/kaomoji/build
 app/src/main/assets/plugins/*.apk
 docs/.vitepress/dist
 docs/.vitepress/cache
+/.skills
