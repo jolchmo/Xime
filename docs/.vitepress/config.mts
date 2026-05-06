@@ -1,14 +1,22 @@
 import { defineConfig } from 'vitepress'
 
 export default defineConfig({
-  title: "曦码五笔输入法",
+  title: "Xime 五笔输入法",
   description: "基于 Rime 引擎构建的 Android 五笔输入法",
   lang: 'zh-CN',
+  vite: {
+    server: {
+      host: '127.0.0.1',
+      port: 3000
+    }
+  },
   themeConfig: {
     nav: [
       { text: '首页', link: '/' },
       { text: '使用文档', link: '/usage' },
-      { text: '插件', link: '/plugins/' }
+      { text: '插件', link: '/plugins/' },
+      { text: '更新日志', link: '/changelog' },
+      { text: '下载', link: 'https://github.com/ximeiorg/Xime/releases' }
     ],
 
     sidebar: {
@@ -17,7 +25,8 @@ export default defineConfig({
           text: '开始',
           items: [
             { text: '简介', link: '/' },
-            { text: '使用文档', link: '/usage' }
+            { text: '使用文档', link: '/usage' },
+            { text: '更新日志', link: '/changelog' }
           ]
         },
         {

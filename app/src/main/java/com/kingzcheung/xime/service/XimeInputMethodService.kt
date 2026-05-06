@@ -454,17 +454,9 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                                 if (enabled) {
                                     feedbackManager.performVibration()
                                     isTrackingVoiceButtons = true
-                                    val started = voiceRecognitionHandler.startRecognition()
-                                    voiceRecordingStarted = started
-                                    Log.d("VoiceButtons", "Speech recognition started: $started")
-                                    if (!started) {
-                                        Log.e(TAG, "Failed to start speech recognition")
-                                        uiState.value = uiState.value.copy(
-                                            isVoiceMode = false,
-                                            voiceRecognitionState = RecognitionState.ERROR
-                                        )
-                                        isTrackingVoiceButtons = false
-                                    }
+                                    voiceRecordingStarted = true
+                                    voiceRecognitionHandler.startRecognition()
+                                    Log.d("VoiceButtons", "Speech recognition starting...")
                                 } else {
                                     isTrackingVoiceButtons = false
                                 }
@@ -577,7 +569,7 @@ if (state.showKeyboardResize) {
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
         loadDarkModePreference()
 
-        predictionManager.lastCommittedText = ""
+        predictionManager.clearCommittedText()
         Log.d(TAG, "onStartInput: cleared lastCommittedText")
 
         checkAndInitializeAssociationEngine()
@@ -692,7 +684,7 @@ if (state.showKeyboardResize) {
             candidateComments = candidatesWithComments.map { it.comment }.toTypedArray(),
             isComposing = inputText.isNotEmpty(),
             isAsciiMode = rimeEngine.isAsciiMode(),
-            associationCandidates = emptyArray(),
+            associationCandidates = uiState.value.associationCandidates,
             isShowingRecentClipboard = false
         )
         
@@ -704,17 +696,6 @@ if (state.showKeyboardResize) {
                 Log.d(TAG, "English association for pending '$pendingEnglish': ${candidates.joinToString()}")
                 withContext(Dispatchers.Main) {
                     uiState.value = uiState.value.copy(associationCandidates = candidates)
-                }
-            }
-        } else if (SettingsPreferences.isSmartPredictionEnabled(this) && inputText.isEmpty() && predictionManager.lastCommittedText.isNotEmpty()) {
-            val isAscii = rimeEngine.isAsciiMode()
-            if (!isAscii) {
-                serviceScope.launch {
-                    val candidates = predictionManager.getChineseAssociations(predictionManager.lastCommittedText, 5)
-                    Log.d(TAG, "Chinese association candidates: ${candidates.joinToString()}")
-                    withContext(Dispatchers.Main) {
-                        uiState.value = uiState.value.copy(associationCandidates = candidates)
-                    }
                 }
             }
         }
@@ -762,16 +743,19 @@ if (state.showKeyboardResize) {
                         
                         needsUIUpdate = true
                     } else {
-                        if (predictionManager.lastCommittedText.isNotEmpty()) {
-                            predictionManager.lastCommittedText = predictionManager.lastCommittedText.dropLast(1)
-                            Log.d(TAG, "Delete committed text, remaining: '${predictionManager.lastCommittedText}'")
-                        }
+                        predictionManager.deleteLastChar()
+                        Log.d(TAG, "Delete committed text, remaining: '${predictionManager.lastCommittedText}'")
                         
-                        uiState.value = uiState.value.copy(
-                            candidates = emptyArray(),
-                            candidateComments = emptyArray(),
-                            associationCandidates = emptyArray()
-                        )
+                        if (SettingsPreferences.isSmartPredictionEnabled(this@XimeInputMethodService) && predictionManager.lastCommittedText.isNotEmpty()) {
+                            val candidates = predictionManager.getChineseAssociations(predictionManager.lastCommittedText, 20)
+                            uiState.value = uiState.value.copy(associationCandidates = candidates)
+                        } else {
+                            uiState.value = uiState.value.copy(
+                                candidates = emptyArray(),
+                                candidateComments = emptyArray(),
+                                associationCandidates = emptyArray()
+                            )
+                        }
                         
                         withContext(Dispatchers.Main) {
                             sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
@@ -1102,11 +1086,11 @@ if (state.showKeyboardResize) {
 
     private fun commitText(text: String) {
         currentInputConnection?.commitText(text, 1)
-        predictionManager.lastCommittedText = text
+        predictionManager.appendCommittedText(text)
         
         predictionManager.recordInput(text)
         
-        getPredictionFromPlugin(text)
+        getPredictionFromPlugin(predictionManager.lastCommittedText)
     }
     
     private fun commitImage(imagePath: String, mimeType: String = "image/jpeg"): Boolean {

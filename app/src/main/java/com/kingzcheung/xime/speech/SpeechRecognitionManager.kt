@@ -1,300 +1,326 @@
 package com.kingzcheung.xime.speech
 
+import android.Manifest
 import android.content.Context
-import android.content.Intent
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
-import com.kingzcheung.xime.MainActivity
-import com.kingzcheung.xime.speech.RecognitionState
+import androidx.annotation.RequiresPermission
 import com.kingzcheung.xime.settings.SettingsPreferences
-import com.kingzcheung.xime.speech.funasr.FunAsrWebSocketManager
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import java.util.concurrent.atomic.AtomicBoolean
+import com.kingzcheung.xime.speech.funasr.FunAsrAsrBackend
+import com.kingzcheung.xime.speech.sherpa.SherpaAsrBackend
+import com.kingzcheung.xime.util.FileLogger
 
 class SpeechRecognitionManager(private val context: Context) {
-    
+
     companion object {
         private const val TAG = "SpeechRecognitionManager"
         private const val SAMPLE_RATE = 16000
         private const val CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_MONO
         private const val AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT
-        private const val BUFFER_SIZE_FACTOR = 1
+        private const val BUFFER_SIZE_SECONDS = 0.1f
     }
-    
-    private val bufferSize = AudioRecord.getMinBufferSize(
-        SAMPLE_RATE,
-        CHANNEL_CONFIG,
-        AUDIO_FORMAT
-    ) * BUFFER_SIZE_FACTOR
-    
-    private var audioRecord: AudioRecord? = null
-    private var webSocketManager: FunAsrWebSocketManager? = null
-    private val isRecording = AtomicBoolean(false)
-    private val coroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    private var recordingJob: Job? = null
-    
+
+    private var backend: AsrBackend? = null
+    private var recordingThread: RecordingThread? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
+
     private var resultCallback: ((String) -> Unit)? = null
+    private var partialResultCallback: ((String) -> Unit)? = null
     private var stateCallback: ((RecognitionState) -> Unit)? = null
     private var errorCallback: ((String) -> Unit)? = null
     private var amplitudeCallback: ((Float) -> Unit)? = null
-    
-    private var partialResultBuffer = StringBuilder()
-    
+
     fun setCallbacks(
         onResult: (String) -> Unit,
+        onPartialResult: ((String) -> Unit)? = null,
         onStateChange: (RecognitionState) -> Unit,
         onError: (String) -> Unit,
         onAmplitude: ((Float) -> Unit)? = null
     ) {
         resultCallback = onResult
+        partialResultCallback = onPartialResult
         stateCallback = onStateChange
         errorCallback = onError
         amplitudeCallback = onAmplitude
     }
-    
-    fun startRecognition(): Boolean {
-        val apiKey = SettingsPreferences.getFunAsrApiKey(context)
+
+    private var isPreloading = false
+    private val preloadLock = Object()
+
+    @RequiresPermission(Manifest.permission.RECORD_AUDIO)
+    fun startRecognition() {
+        synchronized(preloadLock) {
+            while (isPreloading) {
+                try {
+                    preloadLock.wait()
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    return
+                }
+            }
+        }
         
-        if (apiKey.isEmpty()) {
-            Log.e(TAG, "FunAsr API Key not configured")
-            errorCallback?.invoke("请先配置阿里百炼 API Key")
+        if (recordingThread != null) {
+            FileLogger.w(TAG, "Recognition already running, ignoring start request")
+            return
+        }
+
+        FileLogger.i(TAG, "Starting speech recognition")
+        stateCallback?.invoke(RecognitionState.PROCESSING)
+
+        if (backend == null) {
+            val useLocal = SettingsPreferences.isSttUseLocal(context)
+            FileLogger.i(TAG, "Creating ASR backend: ${if (useLocal) "Sherpa (local)" else "FunAsr (online)"}")
             
-            coroutineScope.launch(Dispatchers.Main) {
-                val intent = Intent(context, MainActivity::class.java)
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                intent.putExtra("open_fragment", "speech_to_text")
-                context.startActivity(intent)
+            val newBackend = createBackend()
+            if (newBackend == null) {
+                FileLogger.e(TAG, "Failed to create ASR backend")
+                errorCallback?.invoke("无法创建 ASR 引擎")
+                stateCallback?.invoke(RecognitionState.ERROR)
+                return
             }
-            return false
-        }
-        
-        if (!startAudioRecording()) {
-            Log.e(TAG, "Failed to start audio recording")
-            errorCallback?.invoke("无法启动录音")
-            return false
-        }
-        
-        partialResultBuffer.clear()
-        
-        webSocketManager = FunAsrWebSocketManager(
-            apiKey = apiKey,
-            onResult = { text, isFinal ->
-                handleRecognitionResult(text, isFinal)
-            },
-            onError = { error ->
-                handleRecognitionError(error)
-            },
-            onStateChanged = { state ->
-                handleStateChanged(state)
-            }
-        )
-        
-        val connected = webSocketManager?.connect() ?: false
-        
-        if (!connected) {
-            Log.e(TAG, "Failed to connect WebSocket")
-            stopAudioRecording()
-            errorCallback?.invoke("连接失败")
-            return false
-        }
-        
-        isRecording.set(true)
-        
-        recordingJob = coroutineScope.launch {
-            try {
-                while (isRecording.get()) {
-                    val buffer = ByteArray(bufferSize)
-                    val bytesRead = audioRecord?.read(buffer, 0, bufferSize) ?: -1
-                    
-                    if (bytesRead > 0) {
-                        val audioChunk = buffer.copyOf(bytesRead)
-                        webSocketManager?.sendAudioChunk(audioChunk)
-                        
-                        val amplitude = calculateAmplitude(buffer, bytesRead)
-                        amplitudeCallback?.invoke(amplitude)
-                    } else if (bytesRead < 0) {
-                        Log.e(TAG, "Audio read error: $bytesRead")
-                        break
-                    }
+            backend = newBackend
+
+            newBackend.setCallbacks(
+                onResult = { text -> handleResult(text) },
+                onPartialResult = { text -> handlePartialResult(text) },
+                onStateChange = { state -> stateCallback?.invoke(state) },
+                onError = { error -> handleError(error) }
+            )
+
+            if (!newBackend.initialize()) {
+                val msg = when {
+                    newBackend is SherpaAsrBackend -> "本地模型未下载或引擎未编译"
+                    newBackend is FunAsrAsrBackend -> "初始化在线引擎失败，请检查 API Key"
+                    else -> "引擎初始化失败"
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "Recording error", e)
-                withContext(Dispatchers.Main) {
-                    errorCallback?.invoke("录音错误: ${e.message}")
-                }
+                FileLogger.e(TAG, "Backend initialization failed: $msg")
+                errorCallback?.invoke(msg)
+                stateCallback?.invoke(RecognitionState.ERROR)
+                return
             }
+            
+            FileLogger.i(TAG, "ASR backend initialized successfully")
         }
-        
-        Log.d(TAG, "Recognition started with FunAsr")
-        return true
+
+        val currentBackend = backend!!
+
+        recordingThread = RecordingThread(currentBackend)
+        recordingThread!!.start()
     }
-    
+
     fun stopRecognition() {
         Log.d(TAG, "Stopping recognition")
-        
-        isRecording.set(false)
-        
-        recordingJob?.cancel()
-        recordingJob = null
-        
-        webSocketManager?.sendFinishTask()
-        
-        coroutineScope.launch {
-            kotlinx.coroutines.delay(500)
-            webSocketManager?.disconnect()
-            webSocketManager = null
+        recordingThread?.let { thread ->
+            thread.interrupt()
+            try {
+                thread.join()
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+            }
         }
-        
-        stopAudioRecording()
-        
+        recordingThread = null
         stateCallback?.invoke(RecognitionState.IDLE)
-        
-        Log.d(TAG, "Recognition stopped")
+
+        if (!SettingsPreferences.isSttKeepModelInRam(context)) {
+            Log.d(TAG, "Release mode: freeing backend resources")
+            backend?.release()
+            backend = null
+        }
     }
-    
+
     fun cancelRecognition() {
         Log.d(TAG, "Canceling recognition")
-        
-        isRecording.set(false)
-        
-        recordingJob?.cancel()
-        recordingJob = null
-        
-        webSocketManager?.cancel()
-        webSocketManager = null
-        
-        stopAudioRecording()
-        
+        recordingThread?.let { thread ->
+            thread.interrupt()
+            try {
+                thread.join()
+            } catch (_: InterruptedException) {
+                Thread.currentThread().interrupt()
+            }
+        }
+        recordingThread = null
         stateCallback?.invoke(RecognitionState.IDLE)
-        
-        Log.d(TAG, "Recognition canceled")
-    }
-    
-    fun getState(): RecognitionState {
-        return when (webSocketManager?.getState()) {
-            FunAsrWebSocketManager.State.LISTENING -> RecognitionState.LISTENING
-            FunAsrWebSocketManager.State.PROCESSING -> RecognitionState.PROCESSING
-            FunAsrWebSocketManager.State.CONNECTING, 
-            FunAsrWebSocketManager.State.CONNECTED -> RecognitionState.LISTENING
-            FunAsrWebSocketManager.State.ERROR -> RecognitionState.ERROR
-            else -> RecognitionState.IDLE
+
+        if (!SettingsPreferences.isSttKeepModelInRam(context)) {
+            backend?.release()
+            backend = null
         }
     }
-    
-    private fun startAudioRecording(): Boolean {
-        try {
-            audioRecord = AudioRecord(
+
+    fun release() {
+        Log.d(TAG, "Releasing speech recognition")
+        cancelRecognition()
+        backend?.release()
+        backend = null
+    }
+
+    fun getState(): RecognitionState {
+        return backend?.getState() ?: RecognitionState.IDLE
+    }
+
+    fun preload() {
+        synchronized(preloadLock) {
+            if (backend != null) return
+            isPreloading = true
+        }
+        
+        val newBackend = createBackend()
+        if (newBackend == null) {
+            synchronized(preloadLock) {
+                isPreloading = false
+                preloadLock.notifyAll()
+            }
+            return
+        }
+
+        newBackend.setCallbacks(
+            onResult = { text -> handleResult(text) },
+            onPartialResult = { text -> handlePartialResult(text) },
+            onStateChange = { state -> stateCallback?.invoke(state) },
+            onError = { error -> handleError(error) }
+        )
+
+        if (!newBackend.initialize()) {
+            synchronized(preloadLock) {
+                isPreloading = false
+                preloadLock.notifyAll()
+            }
+            return
+        }
+
+        synchronized(preloadLock) {
+            backend = newBackend
+            isPreloading = false
+            preloadLock.notifyAll()
+        }
+
+        newBackend.start()
+        newBackend.stop()
+    }
+
+    private fun createBackend(): AsrBackend {
+        return if (SettingsPreferences.isSttUseLocal(context)) {
+            SherpaAsrBackend(context)
+        } else {
+            FunAsrAsrBackend(context)
+        }
+    }
+
+    private fun createAudioRecord(): AudioRecord? {
+        val bufferSize = (SAMPLE_RATE * BUFFER_SIZE_SECONDS).toInt()
+        return try {
+            val record = AudioRecord(
                 MediaRecorder.AudioSource.MIC,
                 SAMPLE_RATE,
                 CHANNEL_CONFIG,
                 AUDIO_FORMAT,
-                bufferSize
+                bufferSize * 2
             )
-            
-            if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
-                Log.e(TAG, "AudioRecord not initialized")
-                return false
+            if (record.state != AudioRecord.STATE_INITIALIZED) {
+                record.release()
+                null
+            } else {
+                record
             }
-            
-            audioRecord?.startRecording()
-            
-            if (audioRecord?.recordingState != AudioRecord.RECORDSTATE_RECORDING) {
-                Log.e(TAG, "AudioRecord not recording")
-                return false
-            }
-            
-            Log.d(TAG, "Audio recording started")
-            return true
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to start audio recording", e)
-            return false
+            Log.e(TAG, "Failed to create AudioRecord", e)
+            null
         }
     }
-    
-    private fun stopAudioRecording() {
-        try {
-            audioRecord?.stop()
-            audioRecord?.release()
-            audioRecord = null
-            Log.d(TAG, "Audio recording stopped")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to stop audio recording", e)
+
+    private inner class RecordingThread(
+        private val currentBackend: AsrBackend
+    ) : Thread("AsrRecording") {
+
+        override fun run() {
+            val audioRecord = createAudioRecord() ?: run {
+                mainHandler.post {
+                    errorCallback?.invoke("无法启动录音")
+                    stateCallback?.invoke(RecognitionState.ERROR)
+                }
+                return
+            }
+
+            if (!currentBackend.start()) {
+                audioRecord.release()
+                mainHandler.post {
+                    errorCallback?.invoke("启动引擎失败")
+                    stateCallback?.invoke(RecognitionState.ERROR)
+                }
+                return
+            }
+
+            audioRecord.startRecording()
+            mainHandler.post {
+                stateCallback?.invoke(RecognitionState.LISTENING)
+            }
+
+            val buffer = ShortArray((SAMPLE_RATE * BUFFER_SIZE_SECONDS).toInt())
+            val byteBuffer = ByteArray(buffer.size * 2)
+            try {
+                // Feed the first 3 chunks quickly without waiting for results
+                // to give the decoder a running start
+                for (i in 0 until 3) {
+                    val nread = audioRecord.read(buffer, 0, buffer.size)
+                    if (nread <= 0) break
+                    for (j in 0 until nread) {
+                        val s = buffer[j].toInt()
+                        byteBuffer[j * 2] = (s and 0xFF).toByte()
+                        byteBuffer[j * 2 + 1] = ((s shr 8) and 0xFF).toByte()
+                    }
+                    currentBackend.processAudioChunk(byteBuffer.copyOf(nread * 2))
+                }
+
+                while (!interrupted()) {
+                    val nread = audioRecord.read(buffer, 0, buffer.size)
+                    if (nread > 0) {
+                        for (i in 0 until nread) {
+                            val s = buffer[i].toInt()
+                            byteBuffer[i * 2] = (s and 0xFF).toByte()
+                            byteBuffer[i * 2 + 1] = ((s shr 8) and 0xFF).toByte()
+                        }
+                        currentBackend.processAudioChunk(byteBuffer.copyOf(nread * 2))
+                    } else if (nread < 0) {
+                        break
+                    }
+                }
+            } catch (_: Exception) {
+            } finally {
+                audioRecord.stop()
+                audioRecord.release()
+            }
+
+            currentBackend.stop()
+
+            Log.d(TAG, "Recognition thread ended")
         }
     }
-    
-    private fun handleRecognitionResult(text: String, isFinal: Boolean) {
-        Log.d(TAG, "Recognition result: $text, isFinal: $isFinal")
-        
-        CoroutineScope(Dispatchers.Main).launch {
+
+    private fun handleResult(text: String) {
+        mainHandler.post {
             if (text.isNotEmpty()) {
                 resultCallback?.invoke(text)
             }
-            
-            if (isFinal) {
-                stateCallback?.invoke(RecognitionState.IDLE)
-            } else {
-                stateCallback?.invoke(RecognitionState.PROCESSING)
+        }
+    }
+
+    private fun handlePartialResult(text: String) {
+        mainHandler.post {
+            if (text.isNotEmpty()) {
+                partialResultCallback?.invoke(text)
             }
         }
     }
-    
-    private fun handleRecognitionError(error: String) {
+
+    private fun handleError(error: String) {
         Log.e(TAG, "Recognition error: $error")
-        
-        CoroutineScope(Dispatchers.Main).launch {
+        mainHandler.post {
             errorCallback?.invoke(error)
         }
-    }
-    
-    private fun handleStateChanged(state: FunAsrWebSocketManager.State) {
-        Log.d(TAG, "State changed: $state")
-        
-        CoroutineScope(Dispatchers.Main).launch {
-            when (state) {
-                FunAsrWebSocketManager.State.LISTENING -> 
-                    stateCallback?.invoke(RecognitionState.LISTENING)
-                FunAsrWebSocketManager.State.PROCESSING -> 
-                    stateCallback?.invoke(RecognitionState.PROCESSING)
-                FunAsrWebSocketManager.State.CONNECTING, 
-                FunAsrWebSocketManager.State.CONNECTED -> 
-                    stateCallback?.invoke(RecognitionState.LISTENING)
-                FunAsrWebSocketManager.State.ERROR -> 
-                    stateCallback?.invoke(RecognitionState.ERROR)
-                else -> 
-                    stateCallback?.invoke(RecognitionState.IDLE)
-            }
-        }
-    }
-    
-    fun release() {
-        cancelRecognition()
-        coroutineScope.cancel()
-        Log.d(TAG, "SpeechRecognitionManager released")
-    }
-    
-    private fun calculateAmplitude(buffer: ByteArray, length: Int): Float {
-        var maxAmplitude = 0
-        val samples = length / 2
-        
-        for (i in 0 until samples) {
-            val sample = ((buffer[i * 2 + 1].toInt() shl 8) or (buffer[i * 2].toInt() and 0xFF)).toShort()
-            val absSample = kotlin.math.abs(sample.toInt())
-            if (absSample > maxAmplitude) {
-                maxAmplitude = absSample
-            }
-        }
-        
-        val normalizedAmplitude = (maxAmplitude / 15000.0).coerceIn(0.0, 1.0)
-        
-        return normalizedAmplitude.toFloat()
     }
 }

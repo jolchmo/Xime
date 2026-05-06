@@ -22,6 +22,10 @@ object SettingsPreferences {
     private const val KEY_STT_ENABLED = "stt_enabled"
     private const val KEY_STT_PROVIDER = "stt_provider"
     private const val KEY_FUNASR_API_KEY = "funasr_api_key"
+    private const val KEY_STT_USE_LOCAL = "stt_use_local"
+    private const val KEY_STT_KEEP_MODEL_IN_RAM = "stt_keep_model_in_ram"
+    
+    private const val KEY_PUNCTUATION_MODEL_ENABLED = "punctuation_model_enabled"
     
     private const val KEY_KEYBOARD_HEIGHT_DP = "keyboard_height_dp"
     private const val DEFAULT_KEYBOARD_HEIGHT_DP = 290
@@ -135,7 +139,7 @@ object SettingsPreferences {
     }
     
     fun isSttEnabled(context: Context): Boolean {
-        return getPrefs(context).getBoolean(KEY_STT_ENABLED, false)
+        return getPrefs(context).getBoolean(KEY_STT_ENABLED, true)
     }
     
     fun setSttEnabled(context: Context, enabled: Boolean) {
@@ -156,6 +160,30 @@ object SettingsPreferences {
     
     fun setFunAsrApiKey(context: Context, apiKey: String) {
         getPrefs(context).edit().putString(KEY_FUNASR_API_KEY, apiKey).apply()
+    }
+    
+    fun isSttUseLocal(context: Context): Boolean {
+        return getPrefs(context).getBoolean(KEY_STT_USE_LOCAL, false)
+    }
+    
+    fun setSttUseLocal(context: Context, useLocal: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_STT_USE_LOCAL, useLocal).apply()
+    }
+    
+    fun isSttKeepModelInRam(context: Context): Boolean {
+        return getPrefs(context).getBoolean(KEY_STT_KEEP_MODEL_IN_RAM, true)
+    }
+    
+    fun setSttKeepModelInRam(context: Context, keep: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_STT_KEEP_MODEL_IN_RAM, keep).apply()
+    }
+    
+    fun isPunctuationModelEnabled(context: Context): Boolean {
+        return getPrefs(context).getBoolean(KEY_PUNCTUATION_MODEL_ENABLED, false)
+    }
+    
+    fun setPunctuationModelEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_PUNCTUATION_MODEL_ENABLED, enabled).apply()
     }
     
     fun getKeyboardHeightDp(context: Context): Int {
