@@ -677,18 +677,28 @@ if (state.showKeyboardResize) {
     private fun updateUI() {
         val inputText = rimeEngine.getInput()
         val candidatesWithComments = rimeEngine.getCandidatesWithComments()
+        val isAsciiMode = rimeEngine.isAsciiMode()
+        
+        val pendingEnglish = uiState.value.pendingEnglishText
+        
+        val (filteredTexts, filteredComments) = if (isAsciiMode) {
+            val filtered = candidatesWithComments.filterNot { candidate ->
+                candidate.text.any { it.code in 0x4E00..0x9FFF }
+            }
+            filtered.map { it.text }.toTypedArray() to filtered.map { it.comment }.toTypedArray()
+        } else {
+            candidatesWithComments.map { it.text }.toTypedArray() to candidatesWithComments.map { it.comment }.toTypedArray()
+        }
         
         uiState.value = uiState.value.copy(
             inputText = inputText,
-            candidates = candidatesWithComments.map { it.text }.toTypedArray(),
-            candidateComments = candidatesWithComments.map { it.comment }.toTypedArray(),
+            candidates = filteredTexts,
+            candidateComments = filteredComments,
             isComposing = inputText.isNotEmpty(),
-            isAsciiMode = rimeEngine.isAsciiMode(),
-            associationCandidates = uiState.value.associationCandidates,
+            isAsciiMode = isAsciiMode,
+            associationCandidates = if (isAsciiMode && pendingEnglish.isEmpty()) emptyArray() else uiState.value.associationCandidates,
             isShowingRecentClipboard = false
         )
-        
-        val pendingEnglish = uiState.value.pendingEnglishText
         
         if (pendingEnglish.isNotEmpty()) {
             serviceScope.launch {
@@ -746,7 +756,7 @@ if (state.showKeyboardResize) {
                         predictionManager.deleteLastChar()
                         Log.d(TAG, "Delete committed text, remaining: '${predictionManager.lastCommittedText}'")
                         
-                        if (SettingsPreferences.isSmartPredictionEnabled(this@XimeInputMethodService) && predictionManager.lastCommittedText.isNotEmpty()) {
+                        if (!state.isAsciiMode && SettingsPreferences.isSmartPredictionEnabled(this@XimeInputMethodService) && predictionManager.lastCommittedText.isNotEmpty()) {
                             val candidates = predictionManager.getChineseAssociations(predictionManager.lastCommittedText, 20)
                             uiState.value = uiState.value.copy(associationCandidates = candidates)
                         } else {
@@ -1090,7 +1100,9 @@ if (state.showKeyboardResize) {
         
         predictionManager.recordInput(text)
         
-        getPredictionFromPlugin(predictionManager.lastCommittedText)
+        if (!uiState.value.isAsciiMode) {
+            getPredictionFromPlugin(predictionManager.lastCommittedText)
+        }
     }
     
     private fun commitImage(imagePath: String, mimeType: String = "image/jpeg"): Boolean {
