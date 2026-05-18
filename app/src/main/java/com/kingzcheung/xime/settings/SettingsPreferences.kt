@@ -27,6 +27,8 @@ object SettingsPreferences {
     
     private const val KEY_PUNCTUATION_MODEL_ENABLED = "punctuation_model_enabled"
     
+    private const val KEY_SWIPE_DOWN_SHOW_ROOTS = "swipe_down_show_roots"
+    
     private const val KEY_KEYBOARD_HEIGHT_DP = "keyboard_height_dp"
     private const val DEFAULT_KEYBOARD_HEIGHT_DP = 290
     
@@ -184,6 +186,14 @@ object SettingsPreferences {
     
     fun setPunctuationModelEnabled(context: Context, enabled: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_PUNCTUATION_MODEL_ENABLED, enabled).apply()
+    }
+    
+    fun isSwipeDownShowRootsEnabled(context: Context): Boolean {
+        return getPrefs(context).getBoolean(KEY_SWIPE_DOWN_SHOW_ROOTS, false)
+    }
+    
+    fun setSwipeDownShowRootsEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_SWIPE_DOWN_SHOW_ROOTS, enabled).apply()
     }
     
     fun getKeyboardHeightDp(context: Context): Int {

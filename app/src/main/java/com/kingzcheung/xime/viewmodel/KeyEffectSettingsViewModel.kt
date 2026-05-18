@@ -12,7 +12,8 @@ data class KeyEffectUiState(
     val soundEnabled: Boolean = true,
     val soundVolume: Int = 50,
     val vibrationEnabled: Boolean = true,
-    val vibrationIntensity: Int = 50
+    val vibrationIntensity: Int = 50,
+    val swipeDownShowRootsEnabled: Boolean = false
 )
 
 class KeyEffectSettingsViewModel(application: Application) : AndroidViewModel(application) {
@@ -22,7 +23,8 @@ class KeyEffectSettingsViewModel(application: Application) : AndroidViewModel(ap
         soundEnabled = SettingsPreferences.isSoundEnabled(context),
         soundVolume = SettingsPreferences.getSoundVolume(context),
         vibrationEnabled = SettingsPreferences.isVibrationEnabled(context),
-        vibrationIntensity = SettingsPreferences.getVibrationIntensity(context)
+        vibrationIntensity = SettingsPreferences.getVibrationIntensity(context),
+        swipeDownShowRootsEnabled = SettingsPreferences.isSwipeDownShowRootsEnabled(context)
     ))
     val uiState: StateFlow<KeyEffectUiState> = _uiState.asStateFlow()
     
@@ -44,5 +46,10 @@ class KeyEffectSettingsViewModel(application: Application) : AndroidViewModel(ap
     fun setVibrationIntensity(intensity: Int) {
         SettingsPreferences.setVibrationIntensity(context, intensity)
         _uiState.update { it.copy(vibrationIntensity = intensity) }
+    }
+    
+    fun setSwipeDownShowRootsEnabled(enabled: Boolean) {
+        SettingsPreferences.setSwipeDownShowRootsEnabled(context, enabled)
+        _uiState.update { it.copy(swipeDownShowRootsEnabled = enabled) }
     }
 }

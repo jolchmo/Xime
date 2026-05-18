@@ -31,6 +31,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import com.kingzcheung.xime.ui.LocalStretchFactor
+import com.kingzcheung.xime.settings.SettingsPreferences
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -66,6 +67,7 @@ fun KeyboardLayout(
     onKeyPressDown: ((String) -> Unit)? = null
 ) {
     val context = LocalContext.current
+    val swipeDownShowRootsEnabled = SettingsPreferences.isSwipeDownShowRootsEnabled(context)
     
     LaunchedEffect(Unit) {
         SubcharHelper.init(context)
@@ -123,7 +125,8 @@ fun KeyboardLayout(
                     isAsciiMode = isAsciiMode,
                     keyboardBackgroundColor = keyboardBackgroundColor,
                     onSwipeStateChange = { state, bounds -> processSwipeState(state, bounds) },
-                    onKeyPressDown = onKeyPressDown
+                    onKeyPressDown = onKeyPressDown,
+                    swipeDownShowRootsEnabled = swipeDownShowRootsEnabled
                 )
             }
             
@@ -146,7 +149,8 @@ fun KeyboardLayout(
                     keyboardBackgroundColor = keyboardBackgroundColor,
                     modifier = Modifier.padding(horizontal = 16.dp),
                     onSwipeStateChange = { state, bounds -> processSwipeState(state, bounds) },
-                    onKeyPressDown = onKeyPressDown
+                    onKeyPressDown = onKeyPressDown,
+                    swipeDownShowRootsEnabled = swipeDownShowRootsEnabled
                 )
             }
             
@@ -194,10 +198,11 @@ fun KeyboardLayout(
                         val bottomKeys = listOf("z", "x", "c", "v", "b", "n", "m")
                         bottomKeys.forEach { key ->
                             val swipeUpText = KeysConfigHelper.getSwipeUpText(key)
-                            val swipeDownText = if (isAsciiMode) 
-                                KeysConfigHelper.getSwipeDownEnglishText(key) 
-                            else 
+                            val swipeDownText = if (isAsciiMode) {
+                                KeysConfigHelper.getSwipeDownEnglishText(key)
+                            } else if (swipeDownShowRootsEnabled) {
                                 KeysConfigHelper.getSwipeDownWubiText(key)
+                            } else null
                             
                             SwipeableKeyButton(
                                 text = if (isShifted || !isAsciiMode) key.uppercase() else key,
@@ -489,7 +494,8 @@ fun KeyboardRowWithConfig(
     keyboardBackgroundColor: Color = Color.Transparent,
     modifier: Modifier = Modifier,
     onSwipeStateChange: ((SwipeState, Rect) -> Unit)? = null,
-    onKeyPressDown: ((String) -> Unit)? = null
+    onKeyPressDown: ((String) -> Unit)? = null,
+    swipeDownShowRootsEnabled: Boolean = false
 ) {
     Row(
         modifier = modifier
@@ -499,10 +505,11 @@ fun KeyboardRowWithConfig(
     ) {
         keys.forEach { key ->
             val swipeUpText = KeysConfigHelper.getSwipeUpText(key)
-            val swipeDownText = if (isAsciiMode) 
-                KeysConfigHelper.getSwipeDownEnglishText(key) 
-            else 
+            val swipeDownText = if (isAsciiMode) {
+                KeysConfigHelper.getSwipeDownEnglishText(key)
+            } else if (swipeDownShowRootsEnabled) {
                 KeysConfigHelper.getSwipeDownWubiText(key)
+            } else null
             
             SwipeableKeyButton(
                 text = if (isShifted || !isAsciiMode) key.uppercase() else key,

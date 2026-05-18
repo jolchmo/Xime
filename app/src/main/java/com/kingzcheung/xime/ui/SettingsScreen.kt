@@ -899,6 +899,34 @@ fun KeyEffectSettingsContent(
                     }
                 })
             }
+            
+            item {
+                SettingsSection(title = "按键手势", content = {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "下滑显示字根",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = "按键下滑时显示字根拆分提示",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = uiState.swipeDownShowRootsEnabled,
+                            onCheckedChange = { viewModel.setSwipeDownShowRootsEnabled(it) }
+                        )
+                    }
+                })
+            }
         }
     }
 }
