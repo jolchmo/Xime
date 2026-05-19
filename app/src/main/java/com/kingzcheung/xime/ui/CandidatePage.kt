@@ -136,15 +136,7 @@ fun CandidatePage(
         }
         
         if (associationCandidates.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(12.dp))
-            
-            Text(
-                text = "联想词",
-                color = textColor.copy(alpha = 0.7f),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier.padding(bottom = 4.dp)
-            )
+            Spacer(modifier = Modifier.height(8.dp))
             
             LazyVerticalGrid(
                 columns = GridCells.Fixed(4),
