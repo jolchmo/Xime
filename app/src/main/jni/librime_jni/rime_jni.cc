@@ -34,14 +34,13 @@ public:
             return;
         }
 
-        // 设置日志目录为用户数据目录下的 logs 子目录
         std::string log_dir = std::string(user_data_dir) + "/logs";
         
         RIME_STRUCT(RimeTraits, traits);
         traits.shared_data_dir = shared_data_dir;
         traits.user_data_dir = user_data_dir;
-        traits.log_dir = log_dir.c_str();  // 启用文件日志，写入到 user_data_dir/logs/
-        traits.min_log_level = 1;  // 只记录 WARNING 及以上级别，避免过多 INFO 日志
+        traits.log_dir = log_dir.c_str();
+        traits.min_log_level = 1;
         traits.app_name = "rime.kime";
         traits.distribution_name = "Xime";
         traits.distribution_code_name = "kime";
@@ -50,112 +49,28 @@ public:
         LOGI("Setting up Rime with shared_data_dir=%s, user_data_dir=%s, log_dir=%s", 
              shared_data_dir, user_data_dir, log_dir.c_str());
         
-        // 第一步：setup
         rime->setup(&traits);
         LOGI("Rime setup completed");
         
-        // 第二步：initialize
         rime->initialize(&traits);
         LOGI("Rime initialize completed");
         
-        // 第三步：检查是否需要部署
-        bool need_deploy = rime->is_maintenance_mode();
-        LOGI("Need deploy: %s", need_deploy ? "true" : "false");
-        
-        if (need_deploy) {
-            LOGI("Starting maintenance/deployment...");
-            rime->start_maintenance(true);
-            
-            // 等待部署完成（最多等待30秒）
-            int wait_count = 0;
-            while (rime->is_maintenance_mode() && wait_count < 300) {
-                usleep(100000);  // 100ms
-                wait_count++;
-                if (wait_count % 10 == 0) {
-                    LOGI("Waiting for deployment... (%d seconds)", wait_count / 10);
-                }
-            }
-            
-            if (rime->is_maintenance_mode()) {
-                LOGE("Deployment timeout!");
-            } else {
-                LOGI("Deployment completed successfully");
-            }
-        }
-        
-        // 第四步：创建会话
+        // 参考 trime：每次 startup 都调用 start_maintenance 
+        // 以触发 librime 刷新 schema 注册表，不判断 is_maintenance_mode
+        // 若 build 文件已存在且最新则几乎立即返回（无实际编译）
+        LOGI("Starting maintenance (refresh schema registry)...");
+        rime->start_maintenance(false);
+    }
+
+    bool createSession() {
+        if (!rime) return false;
         session_id_ = rime->create_session();
         LOGI("Session created: %lu", (unsigned long)session_id_);
-        
-        // 检查是否成功加载了词典（尝试获取候选词）
-        bool dict_loaded = false;
-        if (session_id_) {
-            // 尝试输入一个键来检查词典是否加载
-            rime->process_key(session_id_, 'a', 0);
-            RIME_STRUCT(RimeContext, context);
-            if (rime->get_context(session_id_, &context)) {
-                if (context.menu.num_candidates > 0) {
-                    dict_loaded = true;
-                    LOGI("Dictionary loaded successfully, candidates available");
-                }
-                rime->free_context(&context);
-            }
-            rime->clear_composition(session_id_);
-        }
-        
-        // 如果词典没有加载，强制重新部署
-        if (!dict_loaded) {
-            LOGI("Dictionary not loaded, forcing redeployment...");
-            
-            // 销毁会话
-            if (session_id_) {
-                rime->destroy_session(session_id_);
-                session_id_ = 0;
-            }
-            
-            // 强制部署
-            rime->start_maintenance(true);
-            
-            // 等待部署完成
-            int wait_count = 0;
-            while (rime->is_maintenance_mode() && wait_count < 300) {
-                usleep(100000);
-                wait_count++;
-                if (wait_count % 10 == 0) {
-                    LOGI("Forced deployment waiting... (%d seconds)", wait_count / 10);
-                }
-            }
-            
-            if (rime->is_maintenance_mode()) {
-                LOGE("Forced deployment timeout!");
-            } else {
-                LOGI("Forced deployment completed");
-            }
-            
-            // 重新创建会话
-            session_id_ = rime->create_session();
-            LOGI("New session created: %lu", (unsigned long)session_id_);
-        }
-        
-        // 第五步：检查当前方案
-        char schema[256];
-        if (rime->get_current_schema(session_id_, schema, sizeof(schema))) {
-            LOGI("Current schema: %s", schema);
-        } else {
-            LOGE("Failed to get current schema!");
-        }
-        
-        // 第六步：检查方案列表
-        RimeSchemaList schema_list = {0};
-        if (rime->get_schema_list(&schema_list)) {
-            LOGI("Available schemas: %zu", schema_list.size);
-            for (size_t i = 0; i < schema_list.size; i++) {
-                LOGI("  Schema %zu: %s (%s)", i, schema_list.list[i].schema_id, schema_list.list[i].name);
-            }
-            rime->free_schema_list(&schema_list);
-        } else {
-            LOGE("Failed to get schema list!");
-        }
+        return session_id_ != 0;
+    }
+
+    bool hasSession() {
+        return session_id_ != 0;
     }
 
     bool isMaintaining() {
@@ -395,7 +310,7 @@ public:
             }
             rime->free_schema_list(&schema_list);
         } else {
-            LOGE("Failed to get schema list!");
+            LOGD("No schemas available yet (deployment may still be running)");
         }
     }
     
@@ -544,6 +459,24 @@ Java_com_kingzcheung_xime_rime_RimeEngine_nativeInitialize(
     
     env->ReleaseStringUTFChars(user_data_dir, user_dir);
     env->ReleaseStringUTFChars(shared_data_dir, shared_dir);
+}
+
+// 创建会话（参考 trime：startup 只初始化引擎，session 延迟创建）
+JNIEXPORT jboolean JNICALL
+Java_com_kingzcheung_xime_rime_RimeEngine_nativeCreateSession(
+    JNIEnv* env,
+    jobject thiz
+) {
+    return Rime::Instance().createSession() ? JNI_TRUE : JNI_FALSE;
+}
+
+// 检查会话是否存在
+JNIEXPORT jboolean JNICALL
+Java_com_kingzcheung_xime_rime_RimeEngine_nativeHasSession(
+    JNIEnv* env,
+    jobject thiz
+) {
+    return Rime::Instance().hasSession() ? JNI_TRUE : JNI_FALSE;
 }
 
 // 检查是否正在维护

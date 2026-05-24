@@ -334,7 +334,7 @@ fun KeyboardLayout(
                         )
                     } else {
                         Text(
-                            text = schemaName,
+                            text = if (isAsciiMode) "英文" else schemaName,
                             color = keyTextColor,
                             fontSize = 14.sp,
                             fontWeight = androidx.compose.ui.text.font.FontWeight.Normal,

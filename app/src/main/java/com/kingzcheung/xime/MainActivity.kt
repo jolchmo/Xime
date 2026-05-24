@@ -2,6 +2,7 @@ package com.kingzcheung.xime
 
 import android.Manifest
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -18,12 +19,23 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import com.kingzcheung.xime.rime.RimeConfigHelper
+import com.kingzcheung.xime.rime.RimeEngine
 import com.kingzcheung.xime.settings.SettingsPreferences
+import com.kingzcheung.xime.ui.KeysConfigHelper
 import com.kingzcheung.xime.ui.SettingsScreen
 import com.kingzcheung.xime.ui.theme.XimeTheme
 import com.kingzcheung.xime.util.PermissionHelper
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+    
+    companion object {
+        private const val TAG = "MainActivity"
+    }
     
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -36,8 +48,27 @@ class MainActivity : ComponentActivity() {
         finish()
     }
     
+    private val prewarmScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    
+    private fun prewarmRimeEngine() {
+        if (RimeEngine.isInitialized()) return
+        prewarmScope.launch {
+            try {
+                Log.d(TAG, "Pre-warming Rime engine...")
+                KeysConfigHelper.loadConfig(this@MainActivity)
+                val (userDataDir, sharedDataDir) = RimeConfigHelper.initializeRimeDataAsync(this@MainActivity)
+                RimeEngine.getInstance().initialize(userDataDir, sharedDataDir)
+                Log.d(TAG, "Rime engine pre-warmed successfully")
+            } catch (e: Exception) {
+                Log.w(TAG, "Rime engine pre-warm failed, will init on demand", e)
+            }
+        }
+    }
+    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        prewarmRimeEngine()
         
         val requestPermission = intent?.getStringExtra("request_permission")
         if (requestPermission == PermissionHelper.PERMISSION_RECORD_AUDIO) {

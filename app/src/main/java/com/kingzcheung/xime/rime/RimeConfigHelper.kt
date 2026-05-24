@@ -3,6 +3,8 @@ package com.kingzcheung.xime.rime
 import android.content.Context
 import android.util.Log
 import com.kingzcheung.xime.settings.SchemaConfigHelper
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.withTimeout
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -28,9 +30,15 @@ object RimeConfigHelper {
         copyAssetsToRimeDir(context, sharedDataDir)
         
         Log.d(TAG, "Checking for missing schema files...")
-        val downloaded = SchemaConfigHelper.downloadMissingSchemas(context)
-        if (downloaded.isNotEmpty()) {
-            Log.i(TAG, "Downloaded schemas: $downloaded")
+        try {
+            withTimeout(60_000L) {
+                val downloaded = SchemaConfigHelper.downloadMissingSchemas(context)
+                if (downloaded.isNotEmpty()) {
+                    Log.i(TAG, "Downloaded schemas: $downloaded")
+                }
+            }
+        } catch (e: TimeoutCancellationException) {
+            Log.w(TAG, "Schema download timed out, continuing with existing files")
         }
         
         checkAndCleanBuildDir(sharedDataDir, userDataDir)
@@ -142,10 +150,10 @@ object RimeConfigHelper {
     private fun copyAssetFile(context: Context, assetPath: String, targetFile: File) {
         try {
             if (targetFile.exists()) {
-                Log.d(TAG, "Overwriting existing file: ${targetFile.name}")
-                targetFile.delete()
+                return
             }
             
+            targetFile.parentFile?.mkdirs()
             context.assets.open(assetPath).use { input ->
                 FileOutputStream(targetFile).use { output ->
                     input.copyTo(output)

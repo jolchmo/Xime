@@ -23,6 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.kingzcheung.xime.clipboard.ClipboardItem
 import com.kingzcheung.xime.service.InputUIState
@@ -62,6 +63,7 @@ fun KeyboardView(
     keyboardBottomPaddingDp: Int = 0,
     isDeploying: Boolean = false,
     deploymentMessage: String = "",
+    onDismissDeploying: (() -> Unit)? = null,
     onKeyPress: (String, Boolean) -> Unit,
     onKeyPressDown: ((String) -> Unit)? = null,
     onCandidateSelect: (Int) -> Unit,
@@ -420,11 +422,15 @@ onHideKeyboard = {
         }
         
         if (isDeploying) {
+            val isError = deploymentMessage.contains("超时") || deploymentMessage.contains("失败")
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .fillMaxHeight()
-                    .background(keyboardBgColor.copy(alpha = 0.9f)),
+                    .background(keyboardBgColor.copy(alpha = 0.9f))
+                    .clickable(enabled = isError && onDismissDeploying != null) {
+                        onDismissDeploying?.invoke()
+                    },
                 contentAlignment = Alignment.Center
             ) {
                 Column(
@@ -435,11 +441,21 @@ onHideKeyboard = {
                         color = keyTextColor,
                         style = androidx.compose.material3.MaterialTheme.typography.bodyLarge
                     )
-                    androidx.compose.material3.Text(
-                        text = "请稍候",
-                        color = keyTextColor.copy(alpha = 0.7f),
-                        style = androidx.compose.material3.MaterialTheme.typography.bodyMedium
-                    )
+                    if (isError) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        androidx.compose.material3.Text(
+                            text = "点击关闭",
+                            color = keyTextColor.copy(alpha = 0.5f),
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            textAlign = TextAlign.Center
+                        )
+                    } else {
+                        androidx.compose.material3.Text(
+                            text = "请稍候",
+                            color = keyTextColor.copy(alpha = 0.7f),
+                            style = androidx.compose.material3.MaterialTheme.typography.bodyMedium
+                        )
+                    }
                 }
             }
         }

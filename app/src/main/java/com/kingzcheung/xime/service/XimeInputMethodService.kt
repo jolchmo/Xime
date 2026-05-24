@@ -53,6 +53,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -211,20 +212,26 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         
         if (RimeEngine.isInitialized()) {
             Log.d(TAG, "initRimeEngine: Engine already initialized, setting up schema...")
-            serviceScope.launch(Dispatchers.Main) {
-                val currentSchema = rimeEngine.getCurrentSchema()
-                val savedSchema = SettingsPreferences.getCurrentSchema(this@XimeInputMethodService)
-                val availableSchemas = rimeEngine.getAvailableSchemas()
-                
-                if (savedSchema in availableSchemas && currentSchema != savedSchema) {
-                    rimeEngine.switchSchema(savedSchema)
+            serviceScope.launch(Dispatchers.IO) {
+                val sessionReady = rimeEngine.ensureSession()
+                if (sessionReady) {
+                    Log.d(TAG, "initRimeEngine: Session ready (from prewarm)")
                 }
-                updateSchemaName()
+                withContext(Dispatchers.Main) {
+                    notifyDeploymentStatus(false, "")
+                    val savedSchema = SettingsPreferences.getCurrentSchema(this@XimeInputMethodService)
+                    val availableSchemas = rimeEngine.getAvailableSchemas()
+                    val currentSchema = rimeEngine.getCurrentSchema()
+                    if (savedSchema in availableSchemas && currentSchema != savedSchema) {
+                        rimeEngine.switchSchema(savedSchema)
+                    }
+                    updateSchemaName()
+                }
             }
             return
         }
         
-        serviceScope.launch(Dispatchers.IO) {
+        val initJob = serviceScope.launch(Dispatchers.IO) {
             try {
                 KeysConfigHelper.loadConfig(this@XimeInputMethodService)
                 
@@ -234,14 +241,23 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                 
                 notifyDeploymentStatus(true, "正在加载输入法引擎...")
                 rimeEngine.initialize(userDataDir, sharedDataDir)
-                
+
+                notifyDeploymentStatus(true, "正在编译词库...")
+                val sessionReady = rimeEngine.ensureSession()
+                if (sessionReady) {
+                    Log.d(TAG, "initRimeEngine: Session ready")
+                } else {
+                    Log.w(TAG, "initRimeEngine: Session not ready after 30s, continuing in background")
+                }
+                notifyDeploymentStatus(false, "")
+
                 withContext(Dispatchers.Main) {
-                    val currentSchema = rimeEngine.getCurrentSchema()
                     val savedSchema = SettingsPreferences.getCurrentSchema(this@XimeInputMethodService)
-                    Log.d(TAG, "initRimeEngine: currentSchema=$currentSchema, savedSchema=$savedSchema")
-                    
                     val availableSchemas = rimeEngine.getAvailableSchemas()
                     Log.d(TAG, "initRimeEngine: availableSchemas=${availableSchemas.joinToString()}")
+                    
+                    val currentSchema = rimeEngine.getCurrentSchema()
+                    Log.d(TAG, "initRimeEngine: currentSchema=$currentSchema, savedSchema=$savedSchema")
                     
                     if (savedSchema in availableSchemas && currentSchema != savedSchema) {
                         Log.d(TAG, "initRimeEngine: Switching to saved schema: $savedSchema")
@@ -253,6 +269,22 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "initRimeEngine: Failed to initialize Rime engine", e)
+                notifyDeploymentStatus(false, "初始化失败")
+            }
+        }
+        
+        // Watchdog: force-clear loading state after 60s
+        // withTimeout cannot cancel native JNI calls; if rimeEngine.initialize() hangs
+        // in librime, the IO coroutine would block forever. This watchdog ensures the
+        // user is never permanently stuck on the loading screen.
+        serviceScope.launch(Dispatchers.Main) {
+            delay(60_000L)
+            if (uiState.value.isDeploying) {
+                Log.w(TAG, "initRimeEngine: Watchdog triggered - native init appears stuck, forcing loading state cleared")
+                uiState.value = uiState.value.copy(
+                    isDeploying = false,
+                    deploymentMessage = "初始化超时，请重启输入法"
+                )
             }
         }
     }
@@ -501,10 +533,13 @@ onVoiceModeChange = { enabled ->
                                     isTrackingVoiceButtons = false
 }
  },
-                             isDeploying = state.isDeploying,
-                             deploymentMessage = state.deploymentMessage
-                              )
-                        }
+                              isDeploying = state.isDeploying,
+                              deploymentMessage = state.deploymentMessage,
+                              onDismissDeploying = {
+                                  notifyDeploymentStatus(false, "")
+                              }
+                               )
+                         }
                      }
                      
 if (state.showKeyboardResize) {

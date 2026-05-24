@@ -8,126 +8,114 @@ data class RimeCandidate(
 )
 
 class RimeEngine {
-    
+
     companion object {
         private const val TAG = "RimeEngine"
         private var instance: RimeEngine? = null
         private var deploymentCallback: ((Boolean, String) -> Unit)? = null
-        
+
         init {
             System.loadLibrary("rime_jni")
             Log.d(TAG, "Native library loaded")
         }
-        
+
         fun getInstance(): RimeEngine {
             return instance ?: synchronized(this) {
                 instance ?: RimeEngine().also { instance = it }
             }
         }
-        
+
         fun isInitialized(): Boolean = instance?.isInitialized ?: false
-        
+
         fun setDeploymentCallback(callback: (isDeploying: Boolean, message: String) -> Unit) {
             deploymentCallback = callback
         }
     }
-    
+
     private var isInitialized = false
-    
+    private val initLock = Any()
+
     private fun notifyDeploymentStatus(isDeploying: Boolean, message: String) {
         deploymentCallback?.invoke(isDeploying, message)
     }
-    
-    /**
-     * 初始化 Rime 引擎
-     * @param userDataDir 用户数据目录（存放用户配置和词库）
-     * @param sharedDataDir 共享数据目录（存放系统词库）
-     */
+
     fun initialize(userDataDir: String, sharedDataDir: String) {
         if (!isInitialized) {
-            Log.d(TAG, "Initializing Rime: userDataDir=$userDataDir, sharedDataDir=$sharedDataDir")
-            
-            notifyDeploymentStatus(true, "正在初始化输入法引擎...")
-            nativeInitialize(userDataDir, sharedDataDir)
-            isInitialized = true
-            
-            Log.d(TAG, "Rime initialized, checking deployment status...")
-            
-            val isMaintaining = isMaintaining()
-            Log.d(TAG, "Is maintaining: $isMaintaining")
-            
-            if (isMaintaining) {
-                notifyDeploymentStatus(true, "正在编译词库，请稍候...")
-                Log.d(TAG, "Waiting for deployment to complete...")
-                var waitCount = 0
-                while (isMaintaining() && waitCount < 300) {
-                    Thread.sleep(100)
-                    waitCount++
-                    if (waitCount % 10 == 0) {
-                        val seconds = waitCount / 10
-                        notifyDeploymentStatus(true, "正在编译词库... ${seconds}秒")
-                        Log.d(TAG, "Still waiting for deployment... ($seconds seconds)")
+            synchronized(initLock) {
+                if (!isInitialized) {
+                    try {
+                        Log.d(TAG, "Initializing Rime: userDataDir=$userDataDir, sharedDataDir=$sharedDataDir")
+
+                        notifyDeploymentStatus(true, "正在加载输入法引擎...")
+                        nativeInitialize(userDataDir, sharedDataDir)
+                        isInitialized = true
+
+                        // 参考 trime: startup 只初始化引擎，不创建 session
+                        // session 在第一次使用时延迟创建（ensureSession）
+                        // 部署在后台异步运行，不阻塞
+
+                        notifyDeploymentStatus(false, "")
+                        Log.d(TAG, "Rime engine initialized (session deferred)")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error during Rime initialization", e)
+                        notifyDeploymentStatus(false, "初始化失败")
                     }
                 }
-                if (isMaintaining()) {
-                    Log.e(TAG, "Deployment timeout after 30 seconds!")
-                    notifyDeploymentStatus(false, "词库编译超时")
-                } else {
-                    Log.d(TAG, "Deployment completed")
-                    notifyDeploymentStatus(false, "")
-                }
-            } else {
-                notifyDeploymentStatus(false, "")
             }
-            
-            val currentSchema = getCurrentSchema()
-            Log.d(TAG, "Current schema after init: $currentSchema")
         }
     }
-    
-    /**
-     * 检查是否正在维护（部署）
-     */
+
+    fun ensureSession(timeoutMs: Long = 60000L): Boolean {
+        if (!isInitialized) return false
+        if (nativeHasSession() && getAvailableSchemas().isNotEmpty()) return true
+
+        var waited = 0L
+        while (waited < timeoutMs) {
+            if (!nativeHasSession()) {
+                nativeCreateSession()
+            }
+            if (getAvailableSchemas().isNotEmpty()) {
+                if (waited > 100) {
+                    Log.d(TAG, "ensureSession: schemas ready after ${waited}ms")
+                }
+                return true
+            }
+            try {
+                Thread.sleep(100)
+            } catch (_: InterruptedException) {
+                return false
+            }
+            waited += 100
+            if (waited % 5000 == 0L) {
+                Log.d(TAG, "ensureSession: waiting for schemas... (${waited/1000}s)")
+            }
+        }
+        Log.w(TAG, "ensureSession: schemas not available after ${timeoutMs}ms, deployment may still be running")
+        return false
+    }
+
     fun isMaintaining(): Boolean {
         return nativeIsMaintaining()
     }
-    
-    /**
-     * 获取当前方案
-     */
+
     fun getCurrentSchema(): String {
+        if (!nativeHasSession()) return ""
         return nativeGetCurrentSchema() ?: ""
     }
-    
-    /**
-     * 处理按键输入
-     * @param keycode 按键码（ASCII 码）
-     * @param mask 修饰键掩码
-     * @return 是否成功处理
-     */
+
     fun processKey(keycode: Int, mask: Int): Boolean {
-        if (!isInitialized) {
-            return false
-        }
-        if (!nativeIsMaintaining()) {
-            return nativeProcessKey(keycode, mask)
-        }
-        return false
+        if (!isInitialized) return false
+        if (!nativeHasSession() && !nativeCreateSession()) return false
+        return nativeProcessKey(keycode, mask)
     }
-    
-    /**
-     * 获取候选词列表
-     * @return 候选词数组
-     */
+
     fun getCandidates(): Array<String> {
+        if (!nativeHasSession()) return emptyArray()
         return nativeGetCandidates() ?: emptyArray()
     }
-    
-    /**
-     * 获取候选词列表（包含编码注释）
-     * @return 候选词列表，包含文本和编码注释
-     */
+
     fun getCandidatesWithComments(): Array<RimeCandidate> {
+        if (!nativeHasSession()) return emptyArray()
         val rawCandidates = nativeGetCandidatesWithComments() ?: emptyArray()
         return rawCandidates.map { pair ->
             RimeCandidate(
@@ -136,92 +124,74 @@ class RimeEngine {
             )
         }.toTypedArray()
     }
-    
+
     fun getInput(): String {
         return nativeGetInput() ?: ""
     }
-    
+
     fun selectCandidate(index: Int): Boolean {
+        if (!nativeHasSession()) return false
         return nativeSelectCandidate(index)
     }
-    
+
     fun pageDown(): Boolean {
-        if (!isInitialized) return false
+        if (!nativeHasSession()) return false
         return nativePageDown()
     }
-    
+
     fun pageUp(): Boolean {
-        if (!isInitialized) return false
+        if (!nativeHasSession()) return false
         return nativePageUp()
     }
-    
+
     fun hasNextPage(): Boolean {
-        if (!isInitialized) return false
+        if (!nativeHasSession()) return false
         return nativeHasNextPage()
     }
-    
+
     fun hasPrevPage(): Boolean {
-        if (!isInitialized) return false
+        if (!nativeHasSession()) return false
         return nativeHasPrevPage()
     }
-    
+
     fun commit(): String {
         return nativeCommit() ?: ""
     }
-    
+
     fun clearComposition() {
         nativeClearComposition()
     }
-    
-    /**
-     * 切换中英文模式（ascii_mode）
-     * @return 是否成功切换
-     */
+
     fun toggleAsciiMode(): Boolean {
-        if (!isInitialized) {
-            return false
-        }
+        if (!nativeHasSession()) return false
         return nativeToggleAsciiMode()
     }
-    
+
     fun isAsciiMode(): Boolean {
-        if (!isInitialized) return false
+        if (!nativeHasSession()) return false
         return nativeIsAsciiMode()
     }
-    
+
     fun switchSchema(schemaId: String): Boolean {
-        if (!isInitialized) {
-            return false
-        }
+        if (!nativeHasSession()) return false
         return nativeSwitchSchema(schemaId)
     }
-    
+
     fun deploy(): Boolean {
-        if (!isInitialized) {
-            return false
-        }
+        if (!isInitialized) return false
         return nativeDeploy()
     }
 
-    /**
-     * 查询词汇编码
-     * @param text 要查询的文本
-     * @return 编码（如果是空字符串表示未找到）
-     */
     fun lookupText(text: String): String {
-        if (!isInitialized || text.isEmpty()) {
-            return ""
-        }
+        if (!isInitialized || text.isEmpty() || !nativeHasSession()) return ""
         return nativeLookupText(text) ?: ""
     }
-    
+
     fun getAvailableSchemas(): Array<String> {
+        if (!nativeHasSession()) return emptyArray()
         return nativeGetAvailableSchemas() ?: emptyArray()
     }
-    
-    /**
-     * 销毁引擎
-     */
+
     fun destroy() {
         if (isInitialized) {
             Log.d(TAG, "Destroying Rime engine")
@@ -229,9 +199,11 @@ class RimeEngine {
             isInitialized = false
         }
     }
-    
+
     // Native 方法声明
     private external fun nativeInitialize(userDataDir: String, sharedDataDir: String)
+    private external fun nativeCreateSession(): Boolean
+    private external fun nativeHasSession(): Boolean
     private external fun nativeIsMaintaining(): Boolean
     private external fun nativeGetCurrentSchema(): String?
     private external fun nativeProcessKey(keycode: Int, mask: Int): Boolean
