@@ -4,10 +4,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -42,6 +41,7 @@ fun NumberKeyboardLayout(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .fillMaxHeight()
                 .background(keyboardBackgroundColor)
                 .padding(vertical = 8.dp, horizontal = 4.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -50,7 +50,7 @@ fun NumberKeyboardLayout(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(IntrinsicSize.Min),
+                .weight(1f),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             // 左列：符号1
@@ -93,7 +93,7 @@ fun NumberKeyboardLayout(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(IntrinsicSize.Min),
+                .weight(1f),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             // 左列：符号2
@@ -133,7 +133,7 @@ fun NumberKeyboardLayout(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(IntrinsicSize.Min),
+                .weight(1f),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             // 左列：符号3
@@ -173,7 +173,7 @@ fun NumberKeyboardLayout(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(IntrinsicSize.Min),
+                .weight(1f),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             // 返回键

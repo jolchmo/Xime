@@ -359,6 +359,11 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                 val isDarkTheme = isDarkTheme()
                 val screenHeightDp = resources.configuration.screenHeightDp
                 val maxHeightDp = screenHeightDp / 2
+                val keyboardHeight = if (state.showKeyboardResize) {
+                    maxHeightDp + 100
+                } else {
+                    minOf(state.keyboardHeightDp, maxHeightDp)
+                }
                 
                 XimeTheme(darkTheme = isDarkTheme, themeId = state.themeId) {
                     Box(
@@ -368,7 +373,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                                 if (state.showKeyboardResize)
                                     (maxHeightDp + 100).dp
                                 else
-                                    (state.keyboardHeightDp + state.keyboardBottomPaddingDp).dp
+                                    (keyboardHeight + state.keyboardBottomPaddingDp).dp
                             )
                     ) {
                         Surface(
@@ -376,7 +381,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                                 .align(androidx.compose.ui.Alignment.BottomCenter)
                                 .fillMaxWidth()
                                 .padding(bottom = 0.dp)
-                                .height(if (state.showKeyboardResize) (state.resizePreviewHeightDp + state.resizePreviewBottomPaddingDp).dp else (state.keyboardHeightDp + state.keyboardBottomPaddingDp).dp),
+                                .height(if (state.showKeyboardResize) (state.resizePreviewHeightDp + state.resizePreviewBottomPaddingDp).dp else (keyboardHeight + state.keyboardBottomPaddingDp).dp),
                             color = MaterialTheme.colorScheme.surface
                         ) {
                         CompositionLocalProvider(LocalStretchFactor provides state.stretchFactor) {
@@ -392,7 +397,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                             isDarkTheme = isDarkTheme,
                             themeId = state.themeId,
                             showBottomButtons = state.showBottomButtons,
-                            keyboardHeightDp = state.keyboardHeightDp,
+                            keyboardHeightDp = keyboardHeight,
                             keyboardBottomPaddingDp = state.keyboardBottomPaddingDp,
                              clipboardItems = clipboardItemsState.value,
                              quickSendItems = quickSendItemsState.value,
@@ -455,7 +460,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                                     resizePreviewBottomPaddingDp = currentPadding,
                                     originalKeyboardHeightDp = currentHeight,
                                     originalKeyboardBottomPaddingDp = currentPadding,
-                                    stretchFactor = ((currentHeight - 118f) / (SettingsPreferences.getDefaultKeyboardHeightDp() - 118f)).coerceAtLeast(0f)
+                                    stretchFactor = ((currentHeight - 126f) / (SettingsPreferences.getDefaultKeyboardHeightDp() - 126f)).coerceAtLeast(0f)
                                 )
                             },
                             onReloadConfig = {
@@ -596,7 +601,7 @@ if (state.showKeyboardResize) {
                               },
                               onCancel = {
                                   val originalHeight = state.originalKeyboardHeightDp
-                                  val cancelStretchFactor = ((originalHeight - 118f) / (SettingsPreferences.getDefaultKeyboardHeightDp() - 118f)).coerceAtLeast(0f)
+                                  val cancelStretchFactor = ((originalHeight - 126f) / (SettingsPreferences.getDefaultKeyboardHeightDp() - 126f)).coerceAtLeast(0f)
                                   uiState.value = uiState.value.copy(
                                       showKeyboardResize = false,
                                       keyboardHeightDp = originalHeight,

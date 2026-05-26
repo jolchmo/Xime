@@ -6,6 +6,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -87,7 +88,7 @@ fun KeyButton(
     
     Box(
         modifier = modifier
-            .height((44 * LocalStretchFactor.current).dp)
+            .fillMaxHeight()
             .shadow(1.dp, RoundedCornerShape(8.dp), ambientColor = Color(0x80000000), spotColor = Color(0x80000000))
             .clip(RoundedCornerShape(8.dp))
             .background(
@@ -236,7 +237,7 @@ fun SwipeableKeyButton(
     
     Box(
         modifier = modifier
-            .height((44 * LocalStretchFactor.current).dp)
+            .fillMaxHeight()
             .shadow(1.dp, RoundedCornerShape(8.dp), ambientColor = Color(0x80000000), spotColor = Color(0x80000000))
             .onGloballyPositioned { coordinates ->
                 buttonBounds = coordinates.boundsInRoot()
@@ -419,7 +420,7 @@ fun IconKeyButton(
     
     Box(
         modifier = modifier
-            .height((44 * LocalStretchFactor.current).dp)
+            .fillMaxHeight()
             .shadow(1.dp, RoundedCornerShape(8.dp), ambientColor = Color(0x80000000), spotColor = Color(0x80000000))
             .clip(RoundedCornerShape(8.dp))
             .background(
@@ -519,7 +520,7 @@ fun SwipeableIconKeyButton(
     
     Box(
         modifier = modifier
-            .height((44 * LocalStretchFactor.current).dp)
+            .fillMaxHeight()
             .shadow(1.dp, RoundedCornerShape(8.dp), ambientColor = Color(0x80000000), spotColor = Color(0x80000000))
             .onGloballyPositioned { coordinates ->
                 buttonBounds = coordinates.boundsInRoot()

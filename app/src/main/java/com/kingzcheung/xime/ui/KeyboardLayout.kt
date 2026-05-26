@@ -111,64 +111,74 @@ fun KeyboardLayout(
         ) {
             
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().weight(1f),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
             // 第一行
             if (isVoiceMode) {
-                DummyKeyboardRow(keysCount = 10, keyBackgroundColor = keyBackgroundColor.copy(alpha = 0.5f), keyboardBackgroundColor = keyboardBackgroundColor)
+                Box(modifier = Modifier.weight(1f)) {
+                    DummyKeyboardRow(keysCount = 10, keyBackgroundColor = keyBackgroundColor.copy(alpha = 0.5f), keyboardBackgroundColor = keyboardBackgroundColor)
+                }
             } else {
-                KeyboardRowWithConfig(
-                    keys = listOf("q", "w", "e", "r", "t", "y", "u", "i", "o", "p"),
-                    onKeyPress = onKeyPress,
-                    keyBackgroundColor = keyBackgroundColor,
-                    keyTextColor = keyTextColor,
-                    isShifted = isShifted,
-                    isAsciiMode = isAsciiMode,
-                    keyboardBackgroundColor = keyboardBackgroundColor,
-                    onSwipeStateChange = { state, bounds -> processSwipeState(state, bounds) },
-                    onKeyPressDown = onKeyPressDown,
-                    swipeDownShowRootsEnabled = shouldShowRadicals,
-                    currentSchemaId = currentSchemaId
-                )
+                Box(modifier = Modifier.weight(1f)) {
+                    KeyboardRowWithConfig(
+                        keys = listOf("q", "w", "e", "r", "t", "y", "u", "i", "o", "p"),
+                        onKeyPress = onKeyPress,
+                        keyBackgroundColor = keyBackgroundColor,
+                        keyTextColor = keyTextColor,
+                        isShifted = isShifted,
+                        isAsciiMode = isAsciiMode,
+                        keyboardBackgroundColor = keyboardBackgroundColor,
+                        onSwipeStateChange = { state, bounds -> processSwipeState(state, bounds) },
+                        onKeyPressDown = onKeyPressDown,
+                        swipeDownShowRootsEnabled = shouldShowRadicals,
+                        currentSchemaId = currentSchemaId
+                    )
+                }
             }
             
             // 第二行
             if (isVoiceMode) {
-                DummyKeyboardRow(
-                    keysCount = 9, 
-                    keyBackgroundColor = keyBackgroundColor.copy(alpha = 0.5f),
-                    keyboardBackgroundColor = keyboardBackgroundColor,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
+                Box(modifier = Modifier.weight(1f).padding(horizontal = 16.dp)) {
+                    DummyKeyboardRow(
+                        keysCount = 9, 
+                        keyBackgroundColor = keyBackgroundColor.copy(alpha = 0.5f),
+                        keyboardBackgroundColor = keyboardBackgroundColor
+                    )
+                }
             } else {
-                KeyboardRowWithConfig(
-                    keys = listOf("a", "s", "d", "f", "g", "h", "j", "k", "l"),
-                    onKeyPress = onKeyPress,
-                    keyBackgroundColor = keyBackgroundColor,
-                    keyTextColor = keyTextColor,
-                    isShifted = isShifted,
-                    isAsciiMode = isAsciiMode,
-                    keyboardBackgroundColor = keyboardBackgroundColor,
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                    onSwipeStateChange = { state, bounds -> processSwipeState(state, bounds) },
-                    onKeyPressDown = onKeyPressDown,
-                    swipeDownShowRootsEnabled = shouldShowRadicals,
-                    currentSchemaId = currentSchemaId
-                )
+                Box(modifier = Modifier.weight(1f)) {
+                    KeyboardRowWithConfig(
+                        keys = listOf("a", "s", "d", "f", "g", "h", "j", "k", "l"),
+                        onKeyPress = onKeyPress,
+                        keyBackgroundColor = keyBackgroundColor,
+                        keyTextColor = keyTextColor,
+                        isShifted = isShifted,
+                        isAsciiMode = isAsciiMode,
+                        keyboardBackgroundColor = keyboardBackgroundColor,
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        onSwipeStateChange = { state, bounds -> processSwipeState(state, bounds) },
+                        onKeyPressDown = onKeyPressDown,
+                        swipeDownShowRootsEnabled = shouldShowRadicals,
+                        currentSchemaId = currentSchemaId
+                    )
+                }
             }
             
             // 第三行
             if (isVoiceMode) {
-                DummyBottomRow(
-                    keyBackgroundColor = keyBackgroundColor.copy(alpha = 0.5f),
-                    specialKeyBackgroundColor = specialKeyBackgroundColor.copy(alpha = 0.5f),
-                    keyboardBackgroundColor = keyboardBackgroundColor
-                )
+                Box(modifier = Modifier.weight(1f)) {
+                    DummyBottomRow(
+                        keyBackgroundColor = keyBackgroundColor.copy(alpha = 0.5f),
+                        specialKeyBackgroundColor = specialKeyBackgroundColor.copy(alpha = 0.5f),
+                        keyboardBackgroundColor = keyboardBackgroundColor
+                    )
+                }
             } else {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .weight(1f)
                         .background(keyboardBackgroundColor),
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
@@ -196,6 +206,7 @@ fun KeyboardLayout(
                     Row(
                         modifier = Modifier
                             .weight(7f)
+                            .fillMaxHeight()
                             .background(keyboardBackgroundColor),
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
@@ -248,6 +259,7 @@ fun KeyboardLayout(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .weight(1f)
                     .background(keyboardBackgroundColor),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
@@ -286,7 +298,7 @@ fun KeyboardLayout(
                 Box(
                     modifier = Modifier
                         .weight(3f)
-                        .height((44 * LocalStretchFactor.current).dp)
+                        .fillMaxHeight()
                         .shadow(
                             1.dp,
                             RoundedCornerShape(8.dp),
@@ -496,7 +508,7 @@ private fun DummyBottomRow(
             modifier = Modifier.weight(1.2f)
         )
         Row(
-            modifier = Modifier.weight(7f),
+            modifier = Modifier.weight(7f).fillMaxHeight(),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             repeat(7) {
@@ -520,7 +532,7 @@ private fun DummyKeyButton(
 ) {
     Box(
         modifier = modifier
-            .height((44 * LocalStretchFactor.current).dp)
+            .fillMaxHeight()
             .clip(RoundedCornerShape(8.dp))
             .background(backgroundColor)
     )

@@ -1,5 +1,6 @@
 package com.kingzcheung.xime.ui
 
+import android.content.res.Configuration
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -28,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.kingzcheung.xime.clipboard.ClipboardItem
@@ -346,30 +348,56 @@ fun KeyboardView(
                         } else Modifier
                     when (keyboardMode) {
                         KeyboardMode.FULL -> {
-                            KeyboardLayout(
-                                onKeyPress = { key ->
-                                    when (key) {
-                                        "shift" -> isShifted = !isShifted
-                                        "mode_change" -> keyboardMode = KeyboardMode.NUMBER
-                                        "emoji" -> showEmoji = true
-                                        else -> onKeyPress(key, isShifted)
-                                    }
-                                },
-                                isShifted = isShifted,
-                                isAsciiMode = isAsciiMode,
-                                schemaName = schemaName,
-                                currentSchemaId = currentSchemaId,
-                                enterKeyText = enterKeyText,
-                                isDarkTheme = isDarkTheme,
-                                keyBackgroundColor = keyBgColor,
-                                keyTextColor = keyTextColor,
-                                specialKeyBackgroundColor = specialKeyBgColor,
-                                keyboardBackgroundColor = keyboardBgColor,
-                                modifier = Modifier.weight(1f).then(cursorMod),
-                                onVoiceModeChange = onVoiceModeChange,
-                                isVoiceMode = isVoiceMode,
-                                onKeyPressDown = onKeyPressDown
-                            )
+                            val configuration = LocalConfiguration.current
+                            val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+                            if (isLandscape) {
+                                SplitKeyboardLayout(
+                                    onKeyPress = { key ->
+                                        when (key) {
+                                            "shift" -> isShifted = !isShifted
+                                            "mode_change" -> keyboardMode = KeyboardMode.NUMBER
+                                            "emoji" -> showEmoji = true
+                                            else -> onKeyPress(key, isShifted)
+                                        }
+                                    },
+                                    isShifted = isShifted,
+                                    isAsciiMode = isAsciiMode,
+                                    schemaName = schemaName,
+                                    enterKeyText = enterKeyText,
+                                    isDarkTheme = isDarkTheme,
+                                    keyBackgroundColor = keyBgColor,
+                                    keyTextColor = keyTextColor,
+                                    specialKeyBackgroundColor = specialKeyBgColor,
+                                    keyboardBackgroundColor = keyboardBgColor,
+                                    modifier = Modifier.weight(1f).then(cursorMod),
+                                    onKeyPressDown = onKeyPressDown
+                                )
+                            } else {
+                                KeyboardLayout(
+                                    onKeyPress = { key ->
+                                        when (key) {
+                                            "shift" -> isShifted = !isShifted
+                                            "mode_change" -> keyboardMode = KeyboardMode.NUMBER
+                                            "emoji" -> showEmoji = true
+                                            else -> onKeyPress(key, isShifted)
+                                        }
+                                    },
+                                    isShifted = isShifted,
+                                    isAsciiMode = isAsciiMode,
+                                    schemaName = schemaName,
+                                    currentSchemaId = currentSchemaId,
+                                    enterKeyText = enterKeyText,
+                                    isDarkTheme = isDarkTheme,
+                                    keyBackgroundColor = keyBgColor,
+                                    keyTextColor = keyTextColor,
+                                    specialKeyBackgroundColor = specialKeyBgColor,
+                                    keyboardBackgroundColor = keyboardBgColor,
+                                    modifier = Modifier.weight(1f).then(cursorMod),
+                                    onVoiceModeChange = onVoiceModeChange,
+                                    isVoiceMode = isVoiceMode,
+                                    onKeyPressDown = onKeyPressDown
+                                )
+                            }
                         }
                         KeyboardMode.NUMBER -> {
                             NumberKeyboardLayout(

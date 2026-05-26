@@ -263,6 +263,7 @@ fun EmojiKeyboardLayout(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .height(44.dp)
                 .padding(horizontal = 4.dp, vertical = 0.dp),
             horizontalArrangement = Arrangement.spacedBy(2.dp),
             verticalAlignment = Alignment.CenterVertically
