@@ -870,6 +870,7 @@ onVoiceModeChange = { enabled ->
     }
     
     private fun clearInputState() {
+        calculatorEngine.clear()
         rimeEngine.clearComposition()
         uiState.value = uiState.value.copy(
             candidates = emptyArray(),
