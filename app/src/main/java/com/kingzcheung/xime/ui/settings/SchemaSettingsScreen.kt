@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Computer
@@ -79,6 +80,7 @@ fun SchemaSettingsContent(
     val context = LocalContext.current
     val viewModel: SchemaSettingsViewModel = viewModel()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    var showStore by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
     var showWirelessSheet by remember { mutableStateOf(false) }
     var showUrlDialog by remember { mutableStateOf(false) }
@@ -280,8 +282,14 @@ fun SchemaSettingsContent(
         }
     }
 
-    Scaffold(
-        topBar = {
+    if (showStore) {
+        SchemaStoreScreen(
+            onBack = { showStore = false },
+            onRefreshSchemas = { viewModel.refresh() }
+        )
+    } else {
+        Scaffold(
+            topBar = {
             TopAppBar(
                 title = { Text("输入方案") },
                 navigationIcon = {
@@ -320,6 +328,18 @@ fun SchemaSettingsContent(
                                 },
                                 leadingIcon = {
                                     Icon(Icons.Default.CloudDownload, null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp))
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("方案市场") },
+                                onClick = {
+                                    showMenu = false
+                                    showStore = true
+                                },
+                                leadingIcon = {
+                                    Icon(Icons.Default.Add, null,
                                         tint = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.size(20.dp))
                                 }
@@ -453,6 +473,7 @@ fun SchemaSettingsContent(
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("部署方案")
             }
+        }
         }
     }
     }
