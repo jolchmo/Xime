@@ -146,7 +146,7 @@ object RimeConfigHelper {
                     if (copyAssetsRecursively(context, fullAssetPath, targetFile)) {
                         copiedAny = true
                     }
-                } else if (fileName.endsWith(".yaml")) {
+                } else if (isCopyableAsset(fileName)) {
                     copyAssetFile(context, fullAssetPath, targetFile)
                     copiedAny = true
                 }
@@ -157,7 +157,14 @@ object RimeConfigHelper {
         
         return copiedAny
     }
-    
+
+    // rime 目录需要的资源类型：方案/配置 yaml + opencc 的 json/txt(+ 可能的 ocd2/bin/gram)
+    private fun isCopyableAsset(name: String): Boolean {
+        val n = name.lowercase()
+        return n.endsWith(".yaml") || n.endsWith(".json") || n.endsWith(".txt") ||
+            n.endsWith(".ocd2") || n.endsWith(".bin") || n.endsWith(".gram")
+    }
+
     private fun copyAssetFile(context: Context, assetPath: String, targetFile: File) {
         try {
             if (targetFile.exists() && targetFile.name.contains("custom")) {
@@ -165,13 +172,20 @@ object RimeConfigHelper {
             }
 
             targetFile.parentFile?.mkdirs()
-            context.assets.open(assetPath).use { input ->
-                val text = input.bufferedReader().readText()
-                val cleaned = if (targetFile.name.endsWith(".schema.yaml")) {
-                    text.lines().filter { !it.trimStart().startsWith("- lua_translator") }.joinToString("\n")
-                } else text
-                FileOutputStream(targetFile).use { output ->
-                    output.write(cleaned.toByteArray())
+            if (targetFile.name.endsWith(".schema.yaml")) {
+                // 方案文件需剥离 lua_translator（Android 无 lua 支持）
+                context.assets.open(assetPath).use { input ->
+                    val cleaned = input.bufferedReader().readText()
+                        .lines().filter { !it.trimStart().startsWith("- lua_translator") }
+                        .joinToString("\n")
+                    FileOutputStream(targetFile).use { output ->
+                        output.write(cleaned.toByteArray())
+                    }
+                }
+            } else {
+                // 其余文件（含 opencc 的 .json/.txt 大字典）按原始字节拷贝，二进制安全且省内存
+                context.assets.open(assetPath).use { input ->
+                    FileOutputStream(targetFile).use { output -> input.copyTo(output) }
                 }
             }
             Log.d(TAG, "Copied: $assetPath -> ${targetFile.absolutePath}")

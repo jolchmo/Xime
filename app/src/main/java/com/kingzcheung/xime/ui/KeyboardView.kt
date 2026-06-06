@@ -123,6 +123,8 @@ fun KeyboardView(
     onCursorMove: ((Int) -> Unit)? = null,
     toolbarButtons: List<String> = ToolbarButton.DEFAULT_VISIBLE.map { it.id },
     onUpdateToolbarButtons: ((List<String>) -> Unit)? = null,
+    onToggleSimplification: (() -> Unit)? = null,
+    isTraditionalMode: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     var isShifted by remember { mutableStateOf(false) }
@@ -196,8 +198,13 @@ fun KeyboardView(
                         ToolbarButton.CLIPBOARD -> ({ currentRoute = KeyboardRoute.Clipboard(0) })
                         ToolbarButton.SCHEMA -> ({ currentRoute = KeyboardRoute.SchemaList })
                         ToolbarButton.QUICK_PHRASE -> ({ currentRoute = KeyboardRoute.Clipboard(1) })
+                        ToolbarButton.SIMPLIFICATION -> ({ onToggleSimplification?.invoke() })
                     }
-                    ToolbarAction(button, onClick)
+                    // 简繁按钮直接显示「简」/「繁」文字，并随当前输出状态变化
+                    val glyph = if (button == ToolbarButton.SIMPLIFICATION) {
+                        if (isTraditionalMode) "繁" else "简"
+                    } else null
+                    ToolbarAction(button, onClick, glyph)
                 }
             )
 

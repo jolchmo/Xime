@@ -42,7 +42,9 @@ data class InputUIState(
     val hasNextPage: Boolean = false,
     val hasPrevPage: Boolean = false,
     val inputSessionId: Long = 0,
-    val toolbarButtons: List<String> = ToolbarButton.DEFAULT_VISIBLE.map { it.id }
+    val toolbarButtons: List<String> = ToolbarButton.DEFAULT_VISIBLE.map { it.id },
+    // 当前是否输出繁體（驱动工具栏简/繁图标，与切换提示同源，避免状态与弹窗对不上）
+    val isTraditionalMode: Boolean = false
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -87,6 +89,7 @@ if (showBottomButtons != other.showBottomButtons) return false
         if (hasPrevPage != other.hasPrevPage) return false
         if (inputSessionId != other.inputSessionId) return false
         if (toolbarButtons != other.toolbarButtons) return false
+        if (isTraditionalMode != other.isTraditionalMode) return false
 
         return true
     }
@@ -128,6 +131,7 @@ result = 31 * result + showBottomButtons.hashCode()
         result = 31 * result + hasNextPage.hashCode()
         result = 31 * result + hasPrevPage.hashCode()
         result = 31 * result + toolbarButtons.hashCode()
+        result = 31 * result + isTraditionalMode.hashCode()
         return result
     }
 }

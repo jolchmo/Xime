@@ -298,12 +298,24 @@ fun CandidateBar(
                                 ),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(
-                                imageVector = action.button.icon,
-                                contentDescription = action.button.label,
-                                tint = if (isPressed) textColor.copy(alpha = 0.6f) else if (isDarkTheme) textColor else textColor.copy(alpha = 0.65f),
-                                modifier = Modifier.size(20.dp)
-                            )
+                            val glyphTint = if (isPressed) textColor.copy(alpha = 0.6f) else if (isDarkTheme) textColor else textColor.copy(alpha = 0.65f)
+                            val glyph = action.overrideGlyph
+                            if (glyph != null) {
+                                // 简繁切换等：直接显示「简」/「繁」文字，反映当前输出状态
+                                Text(
+                                    text = glyph,
+                                    color = glyphTint,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = action.button.icon,
+                                    contentDescription = action.button.label,
+                                    tint = glyphTint,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
                         }
                     }
                 }

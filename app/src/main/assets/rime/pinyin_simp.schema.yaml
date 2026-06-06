@@ -18,6 +18,9 @@ switches:
     states: [ 中文, 西文 ]
   - name: full_shape
     states: [ 半角, 全角 ]
+  - name: simplification
+    states: [ 简, 繁 ]
+    reset: 0
   - name: ascii_punct
     states: [ 。，, ．， ]
 
@@ -41,6 +44,9 @@ engine:
     - punct_translator
     - script_translator
     - reverse_lookup_translator
+  filters:
+    - simplifier
+    - uniquifier
 
 speller:
   alphabet: zyxwvutsrqponmlkjihgfedcba
@@ -77,6 +83,10 @@ reverse_lookup:
 
 menu:
   page_size: 20
+
+simplifier:
+  option_name: simplification
+  opencc_config: s2t.json
 
 punctuator:
   import_preset: default

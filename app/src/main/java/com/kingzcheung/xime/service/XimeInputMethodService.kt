@@ -658,7 +658,9 @@ onVoiceModeChange = { enabled ->
                                onUpdateToolbarButtons = { buttons ->
                                    SettingsPreferences.setToolbarButtons(this@XimeInputMethodService, buttons)
                                    uiState.value = uiState.value.copy(toolbarButtons = buttons)
-                               }
+                               },
+                               onToggleSimplification = { toggleSimplification() },
+                               isTraditionalMode = state.isTraditionalMode
                                 )
                          }
                      }
@@ -949,9 +951,10 @@ onVoiceModeChange = { enabled ->
             associationCandidates = if (isAsciiMode && pendingEnglish.isEmpty()) emptyArray() else uiState.value.associationCandidates,
             isShowingRecentClipboard = false,
             hasNextPage = hasNextPage,
-            hasPrevPage = hasPrevPage
+            hasPrevPage = hasPrevPage,
+            isTraditionalMode = computeTraditionalMode()
         )
-        
+
         if (pendingEnglish.isNotEmpty()) {
             serviceScope.launch {
                 val candidates = predictionManager.getEnglishAssociations(pendingEnglish, 5)
@@ -984,12 +987,17 @@ onVoiceModeChange = { enabled ->
 
             val currentSchemaId = rimeEngine.getCurrentSchema()
             val schemaInfo = schemas.find { it.schemaId == currentSchemaId }
+            // 缓存该方案的简繁方向（s2t 开=繁 / t2s 开=简 / 不支持=null），供工具栏图标与切换提示同源使用
+            simpOnProducesTraditional = SchemaManager.simplificationProducesTraditional(
+                this@XimeInputMethodService, currentSchemaId
+            )
 
             withContext(Dispatchers.Main) {
                 uiState.value = uiState.value.copy(
                     schemaName = schemaInfo?.name ?: currentSchemaId,
                     currentSchemaId = currentSchemaId,
-                    schemas = schemas
+                    schemas = schemas,
+                    isTraditionalMode = computeTraditionalMode()
                 )
             }
         }
@@ -1432,7 +1440,35 @@ onVoiceModeChange = { enabled ->
         rimeEngine.toggleAsciiMode()
         updateUI()
     }
-    
+
+    // 当前方案简繁方向缓存（随方案切换更新，避免每次按键读方案文件）：
+    //   null=不支持简繁；true=simplification 开→繁體；false=开→简体
+    @Volatile
+    private var simpOnProducesTraditional: Boolean? = null
+
+    // 依据缓存方向 + 当前 simplification 选项，判断现在是否在输出繁體
+    private fun computeTraditionalMode(): Boolean {
+        val dir = simpOnProducesTraditional ?: return false
+        val optionOn = rimeEngine.isSimplification()
+        return if (dir) optionOn else !optionOn
+    }
+
+    private fun toggleSimplification() {
+        // 只有当前方案带 simplifier/simplification 时转换才会真正生效，否则提示不支持，避免误导
+        val schemaId = uiState.value.currentSchemaId
+        if (!SchemaManager.schemaSupportsSimplification(this, schemaId)) {
+            android.widget.Toast.makeText(this, "当前方案不支持简繁转换", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        // 不同方案方向不同：自定义方案 s2t（开=繁），cangjie5/quick5 等 t2s（开=简）。
+        // 用真实方向换算「现在是不是繁體」，让弹窗与工具栏简/繁图标一致。
+        val newOptionOn = rimeEngine.toggleSimplification()
+        val dir = SchemaManager.simplificationProducesTraditional(this, schemaId)
+        val nowTraditional = if (dir == true) newOptionOn else !newOptionOn
+        android.widget.Toast.makeText(this, if (nowTraditional) "繁體" else "简体", android.widget.Toast.LENGTH_SHORT).show()
+        updateUI()
+    }
+
     private fun reloadConfig() {
         Log.d(TAG, "Deploying schema...")
         

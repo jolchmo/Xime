@@ -16,6 +16,9 @@ switches:
     states: [ 中文, 英文 ]
   - name: full_shape
     states: [ 半角, 全角 ]
+  - name: simplification
+    states: [ 简, 繁 ]
+    reset: 0
 
 engine:
   processors:
@@ -37,6 +40,7 @@ engine:
     - punct_translator
     - table_translator
   filters:
+    - simplifier
     - uniquifier
 
 speller:
@@ -55,6 +59,10 @@ translator:
   enable_user_dict: true
   enable_encoder: true
   encode_commit_history: true
+
+simplifier:
+  option_name: simplification
+  opencc_config: s2t.json
 
 punctuator:
   import_preset: default

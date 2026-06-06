@@ -199,6 +199,27 @@ class RimeEngine {
         return nativeSwitchSchema(schemaId)
     }
 
+    // 通用运行时选项读写（simplification 等）
+    fun setOption(name: String, value: Boolean): Boolean {
+        if (!nativeHasSession()) return false
+        return nativeSetOption(name, value)
+    }
+
+    fun getOption(name: String): Boolean {
+        if (!nativeHasSession()) return false
+        return nativeGetOption(name)
+    }
+
+    /** 切换简繁，返回切换后的 simplification 选项新状态（true=已开启）。无会话时返回 false。 */
+    fun toggleSimplification(): Boolean {
+        if (!nativeHasSession()) return false
+        val newVal = !nativeGetOption("simplification")
+        nativeSetOption("simplification", newVal)
+        return newVal
+    }
+
+    fun isSimplification(): Boolean = nativeHasSession() && nativeGetOption("simplification")
+
     fun startMaintenance(full: Boolean): Boolean {
         if (!isInitialized) return false
         return nativeStartMaintenance(full)
@@ -246,6 +267,8 @@ class RimeEngine {
     private external fun nativeToggleAsciiMode(): Boolean
     private external fun nativeIsAsciiMode(): Boolean
     private external fun nativeSwitchSchema(schemaId: String): Boolean
+    private external fun nativeSetOption(name: String, value: Boolean): Boolean
+    private external fun nativeGetOption(name: String): Boolean
     private external fun nativeStartMaintenance(full: Boolean): Boolean
     private external fun nativeDeploy(): Boolean
     private external fun nativeDeploySchema(schemaId: String): Boolean

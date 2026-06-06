@@ -62,6 +62,39 @@ object SchemaManager {
         return f.exists()
     }
 
+    // 该方案是否真正支持简繁转换（含 simplifier 滤镜或 simplification 开关），
+    // 用于避免在不支持的方案上给出"已转换"的误导提示
+    fun schemaSupportsSimplification(context: Context, schemaId: String): Boolean {
+        val f = File(getRimeDir(context), "$schemaId.schema.yaml")
+        if (!f.exists()) return false
+        return try {
+            val text = f.readText()
+            text.contains("simplifier") ||
+                Regex("""(?m)^\s*-\s*name:\s*simplification""").containsMatchIn(text)
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    // 打开 simplification 选项后，输出是「繁體」还是「简体」？
+    //   返回 true  → 开=繁體（内置自定义方案用 s2t：简→繁）
+    //   返回 false → 开=简体（cangjie5/quick5 等繁体方案，默认/t2s：繁→简）
+    //   返回 null  → 该方案不支持简繁
+    // 让工具栏图标(简/繁)与切换提示都依据真实方向，避免状态与弹窗对不上。
+    fun simplificationProducesTraditional(context: Context, schemaId: String): Boolean? {
+        if (!schemaSupportsSimplification(context, schemaId)) return null
+        val f = File(getRimeDir(context), "$schemaId.schema.yaml")
+        return try {
+            val cfg = Regex("""(?m)^\s*opencc_config\s*:\s*['"]?([\w./-]+)""")
+                .find(f.readText())?.groupValues?.getOrNull(1)?.lowercase()
+            // 未写 opencc_config → librime 默认 t2s（繁→简），开启=简体
+            // s2t / s2hk / s2tw(p) 等以 s2 开头 → 简→繁，开启=繁體
+            cfg != null && cfg.startsWith("s2")
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     fun schemaNeedsDict(context: Context, schemaId: String): Boolean {
         val dictName = getReferencedDictName(context, schemaId) ?: schemaId
         return !File(getRimeDir(context), "$dictName.dict.yaml").exists()

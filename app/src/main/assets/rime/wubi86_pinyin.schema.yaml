@@ -15,6 +15,9 @@ schema:
 switches:
   - name: full_shape
     states: [ 半角, 全角 ]
+  - name: simplification
+    states: [ 简, 繁 ]
+    reset: 0
   - name: extended_charset
     states: [ 常用, 扩展 ]
   - name: ascii_punct
@@ -40,6 +43,9 @@ engine:
     - punct_translator
     - reverse_lookup_translator
     - table_translator
+  filters:
+    - simplifier
+    - uniquifier
 
 speller:
   alphabet: "abcdefghijklmnopqrstuvwxyz"
@@ -74,6 +80,10 @@ reverse_lookup:
     - xform/([nl])v/$1ü/
     - xform/([nl])ue/$1üe/
     - xform/([jqxy])v/$1u/
+
+simplifier:
+  option_name: simplification
+  opencc_config: s2t.json
 
 punctuator:
   import_preset: default

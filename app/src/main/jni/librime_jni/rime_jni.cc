@@ -272,6 +272,18 @@ public:
         return false;
     }
 
+    // 通用：设置 / 读取 Rime 运行时选项（如 simplification、full_shape、ascii_punct）
+    bool setOption(const char* name, bool value) {
+        if (!rime || !session_id_) return false;
+        rime->set_option(session_id_, name, value);
+        return true;
+    }
+
+    bool getOption(const char* name) {
+        if (!rime || !session_id_) return false;
+        return rime->get_option(session_id_, name);
+    }
+
     bool switchSchema(const char* schema_id) {
         if (!rime || !session_id_) {
             LOGE("switchSchema: rime or session not available");
@@ -715,6 +727,33 @@ Java_com_kingzcheung_xime_rime_RimeEngine_nativeIsAsciiMode(
     jobject thiz
 ) {
     return Rime::Instance().isAsciiMode() ? JNI_TRUE : JNI_FALSE;
+}
+
+// 设置运行时选项（如 simplification）
+JNIEXPORT jboolean JNICALL
+Java_com_kingzcheung_xime_rime_RimeEngine_nativeSetOption(
+    JNIEnv* env,
+    jobject thiz,
+    jstring name,
+    jboolean value
+) {
+    const char* n = env->GetStringUTFChars(name, nullptr);
+    bool result = Rime::Instance().setOption(n, value == JNI_TRUE);
+    env->ReleaseStringUTFChars(name, n);
+    return result ? JNI_TRUE : JNI_FALSE;
+}
+
+// 读取运行时选项
+JNIEXPORT jboolean JNICALL
+Java_com_kingzcheung_xime_rime_RimeEngine_nativeGetOption(
+    JNIEnv* env,
+    jobject thiz,
+    jstring name
+) {
+    const char* n = env->GetStringUTFChars(name, nullptr);
+    bool result = Rime::Instance().getOption(n);
+    env->ReleaseStringUTFChars(name, n);
+    return result ? JNI_TRUE : JNI_FALSE;
 }
 
 // 切换输入方案
