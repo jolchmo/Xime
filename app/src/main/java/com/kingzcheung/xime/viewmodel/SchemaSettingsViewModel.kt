@@ -5,7 +5,9 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.kingzcheung.xime.rime.RimeEngine
+import com.kingzcheung.xime.settings.KeysConfigHelper
 import com.kingzcheung.xime.settings.SchemaManager
+import com.kingzcheung.xime.ui.theme.KeyboardThemes
 import com.kingzcheung.xime.settings.SchemaMeta
 import com.kingzcheung.xime.settings.SettingsPreferences
 import kotlinx.coroutines.Dispatchers
@@ -123,6 +125,9 @@ class SchemaSettingsViewModel(application: Application) : AndroidViewModel(appli
         viewModelScope.launch {
             _uiState.update { it.copy(isDeploying = true) }
             val success = withContext(Dispatchers.IO) {
+                // 部署前重新加载 xime 手势配置和配色方案（用户可能更新了 xime.custom.yaml）
+                KeysConfigHelper.loadConfig(context)
+                KeyboardThemes.reload(context)
                 val engine = RimeEngine.getInstance()
                 engine.deploy()
             }

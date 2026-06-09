@@ -3,6 +3,7 @@ package com.kingzcheung.xime.settings
 import android.content.Context
 import android.util.Log
 import com.charleskorn.kaml.Yaml
+import com.charleskorn.kaml.YamlConfiguration
 import com.charleskorn.kaml.YamlMap
 import com.charleskorn.kaml.YamlNode
 import com.charleskorn.kaml.YamlScalar
@@ -10,6 +11,9 @@ import com.charleskorn.kaml.YamlList
 import com.kingzcheung.xime.keyboard.GestureAction
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerialName
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
@@ -157,6 +161,8 @@ data class XimeConfig(
     val colorSchemes: Map<String, ColorSchemeEntry>? = null,
     @SerialName("style")
     val style: StyleConfig? = null,
+    @SerialName("customization")
+    val customization: Map<String, String>? = null,
 )
 
 @Serializable
@@ -175,7 +181,7 @@ object KeysConfigHelper {
     private const val XIME_CONFIG_FILE = "xime.yaml"
     private const val XIME_CUSTOM_CONFIG_FILE = "xime.custom.yaml"
     
-    private val yaml = Yaml.default
+    private val yaml = Yaml(configuration = YamlConfiguration(strictMode = false))
     
     private var config: KeysConfig = KeysConfig(
         swipeUp = getDefaultSwipeUp(),
@@ -184,6 +190,10 @@ object KeysConfigHelper {
 
     // 新：手势配置缓存
     private var keyGestureConfig: Map<String, KeyGestureConfig> = emptyMap()
+    
+    /** 配置版本号，每次 loadConfig 时递增，用于 Compose 感知配置变更。 */
+    private val _configVersion = MutableStateFlow(0)
+    val configVersion: StateFlow<Int> = _configVersion.asStateFlow()
     
     fun loadConfig(context: Context): KeysConfig {
         loadXimeConfig(context)
@@ -198,7 +208,8 @@ object KeysConfigHelper {
         try {
             // 键盘手势（从原始 YAML 手动解析）
             keyGestureConfig = parseKeyboardFromAssets(context) ?: emptyMap()
-            Log.d(TAG, "Loaded config: ${keyGestureConfig.size} keys")
+            _configVersion.value++
+            Log.d(TAG, "Loaded config: ${keyGestureConfig.size} keys (v${_configVersion.value})")
         } catch (e: Exception) {
             Log.w(TAG, "Failed to load xime config", e)
         }
@@ -207,10 +218,13 @@ object KeysConfigHelper {
     /** 从 xime.yaml + xime.custom.yaml 合并解析键盘手势配置。 */
     private fun parseKeyboardFromAssets(context: Context): Map<String, KeyGestureConfig>? {
         val defaultText = readAssetText(context, XIME_CONFIG_FILE) ?: return null
-        val default = parseKeyboardYamlText(defaultText)
-        val customText = readAssetText(context, XIME_CUSTOM_CONFIG_FILE)
-        val custom = customText?.let { parseKeyboardYamlText(it) }
-        return custom ?: default
+        val default = parseKeyboardYamlText(defaultText) ?: return null
+        // 优先从用户数据目录读取自定义覆盖
+        val customText = readUserDataText(context, XIME_CUSTOM_CONFIG_FILE)
+            ?: readAssetText(context, XIME_CUSTOM_CONFIG_FILE)
+        val custom = customText?.let { parseKeyboardYamlText(it) } ?: return default
+        // 合并：自定义覆盖同名键，默认填充其余键
+        return default + custom
     }
 
     /** 从 YAML 文本中提取 keyboard.keys 段。 */
@@ -232,6 +246,7 @@ object KeysConfigHelper {
         // 先从用户数据目录读取自定义覆盖，没有则尝试 assets（兼容旧版）
         val customText = readUserDataText(context, XIME_CUSTOM_CONFIG_FILE)
             ?: readAssetText(context, XIME_CUSTOM_CONFIG_FILE)
+        Log.d(TAG, "loadMergedConfig: customText=${customText != null}, len=${customText?.length}")
         val custom = parseConfig(customText)
         return mergeConfig(default, custom)
     }
@@ -253,6 +268,7 @@ object KeysConfigHelper {
             ximeIndex = custom.ximeIndex ?: default.ximeIndex,
             colorSchemes = custom.colorSchemes ?: default.colorSchemes,
             style = custom.style ?: default.style,
+            customization = custom.customization ?: default.customization,
         )
     }
 
@@ -272,10 +288,14 @@ object KeysConfigHelper {
     /** 从用户数据目录 (context.filesDir/rime/) 读取文件。 */
     private fun readUserDataText(context: Context, fileName: String): String? {
         val file = File(context.filesDir, "rime/$fileName")
+        Log.d(TAG, "readUserDataText: path=${file.absolutePath}, exists=${file.exists()}")
         if (!file.exists()) return null
         return try {
-            file.readText()
+            val text = file.readText()
+            Log.d(TAG, "readUserDataText: read ${text.length} chars, first 80=${text.take(80)}")
+            text
         } catch (e: Exception) {
+            Log.w(TAG, "readUserDataText: failed", e)
             null
         }
     }

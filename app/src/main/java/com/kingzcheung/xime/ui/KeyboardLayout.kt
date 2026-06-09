@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.sp
 import com.kingzcheung.xime.util.PermissionHelper
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.collectAsState
 
 @Composable
 fun KeyboardLayout(
@@ -102,6 +103,9 @@ fun KeyboardLayout(
     var swipeState by remember { mutableStateOf(SwipeState()) }
     var keyboardBounds by remember { mutableStateOf(Rect(0f, 0f, 0f, 0f)) }
     var lastKeyBounds by remember { mutableStateOf(Rect(0f, 0f, 0f, 0f)) }
+    
+    // 监听手势配置版本号，部署后强制刷新键帽显示
+    val cfgVer by KeysConfigHelper.configVersion.collectAsState()
     
     fun processSwipeState(state: SwipeState, bounds: Rect) {
         val newState = if (state.isSwipeDown && state.swipeText != null) {
@@ -157,7 +161,8 @@ fun KeyboardLayout(
                         onKeyPressDown = onKeyPressDown,
                         swipeDownHintsEnabled = swipeDownHintsEnabled,
                         swipeUpHintsEnabled = swipeUpHintsEnabled,
-                        onCommitText = onCommitText
+                        onCommitText = onCommitText,
+                        configVersion = cfgVer
                     )
                 }
             }
@@ -186,7 +191,8 @@ fun KeyboardLayout(
                         onKeyPressDown = onKeyPressDown,
                         swipeDownHintsEnabled = swipeDownHintsEnabled,
                         swipeUpHintsEnabled = swipeUpHintsEnabled,
-                        onCommitText = onCommitText
+                        onCommitText = onCommitText,
+                        configVersion = cfgVer
                     )
                 }
             }
@@ -256,9 +262,22 @@ fun KeyboardLayout(
                                 longPressConfig?.values?.associateBy { it.label }
                             } else null
 
+                            // 键帽显示文本：中文模式取 tap 内容 + uppercase，英文模式跟随 Shift
+                            val tapGesture = KeysConfigHelper.getKeyGesture(key)?.tap
+                            val commitValue = if (!isAsciiMode) {
+                                tapGesture?.value?.takeIf { it.isNotEmpty() } ?: key
+                            } else {
+                                key
+                            }
+                            val displayText = if (!isAsciiMode) {
+                                commitValue.uppercase()
+                            } else {
+                                if (isShifted) key.uppercase() else key
+                            }
+
                             SwipeableKeyButton(
-                                text = if (isShifted || !isAsciiMode) key.uppercase() else key,
-                                onClick = { onKeyPress(key) },
+                                text = displayText,
+                                onClick = { onKeyPress(commitValue) },
                                 backgroundColor = keyBackgroundColor,
                                 textColor = keyTextColor,
                                 modifier = Modifier.weight(1f),
@@ -628,7 +647,8 @@ fun KeyboardRowWithConfig(
     onCommitText: ((String) -> Unit)? = null,
     onGestureAction: ((GestureAction, String) -> Unit)? = null,
     fontSize: androidx.compose.ui.unit.TextUnit = androidx.compose.ui.unit.TextUnit.Unspecified,
-    swipeFontSize: androidx.compose.ui.unit.TextUnit = 9.sp
+    swipeFontSize: androidx.compose.ui.unit.TextUnit = 9.sp,
+    configVersion: Int = 0,
 ) {
     Row(
         modifier = modifier
@@ -655,10 +675,23 @@ fun KeyboardRowWithConfig(
             val longPressGestureMap = if (longPressDisplay == "bubble") {
                 longPressConfig?.values?.associateBy { it.label }
             } else null
+
+            // 键帽显示文本：中文模式取 tap 内容 + uppercase，英文模式跟随 Shift
+            val tapGesture = KeysConfigHelper.getKeyGesture(key)?.tap
+            val commitValue = if (!isAsciiMode) {
+                tapGesture?.value?.takeIf { it.isNotEmpty() } ?: key
+            } else {
+                key
+            }
+            val displayText = if (!isAsciiMode) {
+                commitValue.uppercase()
+            } else {
+                if (isShifted) key.uppercase() else key
+            }
             
             SwipeableKeyButton(
-                text = if (isShifted || !isAsciiMode) key.uppercase() else key,
-                onClick = { onKeyPress(key) },
+                text = displayText,
+                onClick = { onKeyPress(commitValue) },
                 backgroundColor = keyBackgroundColor,
                 textColor = keyTextColor,
                 modifier = Modifier.weight(1f),

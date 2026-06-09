@@ -157,8 +157,38 @@ object KeyboardThemes {
     /** 重新加载 xime.yaml/xime.custom.yaml 中的配色方案并更新缓存。 */
     fun reload(context: Context) {
         configOverrides = KeysConfigHelper.loadColorSchemes(context)
-        themesCache = defaultThemes.map { applyConfigOverrides(it) }
+        android.util.Log.d("KeyboardTheme", "reload: configOverrides=${configOverrides.keys}")
+        // 1) 对硬编码主题应用配置覆盖
+        val overridden = defaultThemes.map { applyConfigOverrides(it) }
+        // 2) 把配置中有但硬编码列表中没有的新主题也加入缓存
+        val existingIds = overridden.map { it.id }.toSet()
+        val newThemes = configOverrides
+            .filterKeys { it !in existingIds }
+            .map { (id, entry) -> buildSchemeFromConfig(id, entry) }
+        themesCache = overridden + newThemes
         themesMapCache = themesCache.associateBy { it.id }
+        android.util.Log.d("KeyboardTheme", "reload: themesCache ids=${themesCache.map { it.id }}")
+    }
+
+    /** 根据配置项创建全新的 KeyboardColorScheme。 */
+    private fun buildSchemeFromConfig(id: String, entry: ColorSchemeEntry): KeyboardColorScheme {
+        val cfgColor = longToColor(entry.primaryColor)
+        val lightened = lightenColor(cfgColor)
+        val veryLight = lightenColor(cfgColor, 0.8f)
+        return KeyboardColorScheme(
+            id = id,
+            name = entry.name.ifEmpty { id },
+            specialKeyLight = veryLight,
+            specialKeyDark = cfgColor,
+            accentLight = cfgColor,
+            accentDark = lightened,
+            primaryLight = cfgColor,
+            primaryDark = lightened,
+            primaryContainerLight = veryLight,
+            primaryContainerDark = cfgColor,
+            surfaceLight = Color.White,
+            surfaceDark = Color(0xFF1C1B1F)
+        )
     }
 
     /** 将 hex long (0xRRGGBB) 转为 Color，补上 FF alpha。 */

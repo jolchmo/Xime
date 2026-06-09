@@ -1482,6 +1482,7 @@ onVoiceModeChange = { enabled ->
     }
     
     private fun reloadConfig() {
+        Log.d(TAG, "========== reloadConfig CALLED ==========")
         Log.d(TAG, "Deploying schema...")
         
         mainHandler.post {
@@ -1594,8 +1595,13 @@ onVoiceModeChange = { enabled ->
     }
     
     private fun deploy() {
+        Log.d(TAG, "========== deploy() CALLED ==========")
         Log.d(TAG, "Deploying schemas")
         serviceScope.launch(Dispatchers.IO) {
+            // 部署前刷新手势配置和配色方案缓存
+            KeysConfigHelper.loadConfig(this@XimeInputMethodService)
+            KeyboardThemes.reload(this@XimeInputMethodService)
+            
             notifyDeploymentStatus(true, "正在部署...")
             
             val success = rimeEngine.deploy()
