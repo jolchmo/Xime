@@ -1,17 +1,11 @@
 package com.kingzcheung.xime.ui
 
 import android.widget.Toast
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.SizeTransform
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,6 +28,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,11 +37,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -183,10 +176,6 @@ fun EmojiKeyboardLayout(
     var selectedTopTabIndex by remember { mutableStateOf(0) }
     var selectedSubCategoryIndex by remember { mutableStateOf(0) }
 
-    // 左右滑动切换分类
-    var totalDrag by remember { mutableStateOf(0f) }
-    val swipeThresholdPx = with(LocalDensity.current) { 100.dp.toPx() }
-
     val allCategories by ExtensionManager.emojiCategoriesFlow.collectAsStateWithLifecycle()
     val pluginCategories = allCategories.filter { it.isPlugin }
     val builtinCategories = allCategories.filter { !it.isPlugin }
@@ -313,153 +302,125 @@ fun EmojiKeyboardLayout(
             }
         }
 
-        Box(
+        val pagerState = rememberPagerState(
+            initialPage = currentPageIndex,
+            pageCount = { totalPages }
+        )
+
+        // 外部切换分类时同步到 Pager
+        LaunchedEffect(currentPageIndex) {
+            pagerState.animateScrollToPage(currentPageIndex)
+        }
+
+        // Pager 滑动时同步到外部状态
+        LaunchedEffect(pagerState.currentPage) {
+            val page = pagerState.currentPage
+            if (page != currentPageIndex) {
+                if (page < builtinCategories.size) {
+                    selectedTopTabIndex = 0
+                    selectedSubCategoryIndex = page
+                } else {
+                    selectedTopTabIndex = page - builtinCategories.size + 1
+                    selectedSubCategoryIndex = 0
+                }
+            }
+        }
+
+        HorizontalPager(
+            state = pagerState,
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .pointerInput(builtinCategories.size, pluginCategories.size) {
-                    detectHorizontalDragGestures(
-                        onDragEnd = {
-                            when {
-                                totalDrag < -swipeThresholdPx -> {
-                                    // 左滑 → 下一个分类
-                                    if (selectedTopTabIndex == 0 && selectedSubCategoryIndex < builtinCategories.lastIndex) {
-                                        selectedSubCategoryIndex++
-                                    } else if (selectedTopTabIndex == 0 && pluginCategories.isNotEmpty()) {
-                                        // Emoji 最后一个子分类 → 第一个插件
-                                        selectedTopTabIndex = 1
-                                        selectedSubCategoryIndex = 0
-                                    } else if (selectedTopTabIndex > 0 && selectedTopTabIndex < pluginCategories.size) {
-                                        selectedTopTabIndex++
-                                    }
-                                    totalDrag = 0f
-                                }
-                                totalDrag > swipeThresholdPx -> {
-                                    // 右滑 → 上一个分类
-                                    if (selectedTopTabIndex == 0 && selectedSubCategoryIndex > 0) {
-                                        selectedSubCategoryIndex--
-                                    } else if (selectedTopTabIndex > 0) {
-                                        selectedTopTabIndex--
-                                    } else if (selectedTopTabIndex == 0 && pluginCategories.isNotEmpty()) {
-                                        // Emoji 第一个子分类 → 最后一个插件
-                                        selectedTopTabIndex = pluginCategories.size
-                                        selectedSubCategoryIndex = 0
-                                    }
-                                    totalDrag = 0f
-                                }
-                            }
-                        },
-                        onHorizontalDrag = { _, dragAmount ->
-                            totalDrag += dragAmount
-                        }
-                    )
-                }
                 .padding(horizontal = if (isLandscape) 50.dp else 4.dp)
                 .padding(bottom = 4.dp)
-        ) {
-            AnimatedContent(
-                targetState = currentPageIndex,
-                modifier = Modifier.fillMaxSize(),
-                transitionSpec = {
-                    val direction = targetState - initialState
-                    if (direction > 0) {
-                        slideInHorizontally { width -> width } + fadeIn() togetherWith
-                        slideOutHorizontally { width -> -width } + fadeOut()
-                    } else {
-                        slideInHorizontally { width -> -width } + fadeIn() togetherWith
-                        slideOutHorizontally { width -> width } + fadeOut()
-                    }.using(SizeTransform(clip = false))
-                },
-                label = "emojiCategoryTransition"
-            ) { pageIndex ->
-                val category = if (pageIndex < builtinCategories.size) {
-                    builtinCategories[pageIndex]
-                } else {
-                    pluginCategories[pageIndex - builtinCategories.size]
-                }
+        ) { pageIndex ->
+            val category = if (pageIndex < builtinCategories.size) {
+                builtinCategories[pageIndex]
+            } else {
+                pluginCategories[pageIndex - builtinCategories.size]
+            }
 
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    if (category.isPlugin && category.emojiItems != null) {
-                        val config = category.layoutConfig
-                        val defaultCols =
-                            if (category.emojiItems.any { it.imageUrl != null }) 6 else 8
-                        val columns = config?.columns ?: if (isLandscape) 15 else defaultCols
-                        val itemHeightDp = config?.itemHeightDp
-                            ?: (if (category.emojiItems.any { it.imageUrl != null }) 60 else 40)
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                if (category.isPlugin && category.emojiItems != null) {
+                    val config = category.layoutConfig
+                    val defaultCols =
+                        if (category.emojiItems.any { it.imageUrl != null }) 6 else 8
+                    val columns = config?.columns ?: if (isLandscape) 15 else defaultCols
+                    val itemHeightDp = config?.itemHeightDp
+                        ?: (if (category.emojiItems.any { it.imageUrl != null }) 60 else 40)
 
-                        category.emojiItems.chunked(columns).forEach { rowItems ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                rowItems.forEach { item ->
-                                    PluginEmojiButton(
-                                        emojiItem = item,
-                                        defaultHeightDp = itemHeightDp,
-                                        backgroundColor = backgroundColor,
-                                        textColor = textColor,
-                                        onClick = {
-                                            val imageUrl = item.imageUrl
-                                            if (imageUrl != null && onImageEmojiSelect != null) {
-                                                onImageEmojiSelect(imageUrl)
-                                            } else if (imageUrl != null) {
-                                                val success =
-                                                    clipboardManager.copyImageToSystemClipboard(
-                                                        imageUrl,
-                                                        item.displayText
-                                                    )
-                                                if (success) {
-                                                    Toast.makeText(
-                                                        context,
-                                                        "已复制表情，可粘贴发送",
-                                                        Toast.LENGTH_SHORT
-                                                    ).show()
-                                                } else {
-                                                    Toast.makeText(
-                                                        context,
-                                                        "复制失败",
-                                                        Toast.LENGTH_SHORT
-                                                    ).show()
-                                                }
+                    category.emojiItems.chunked(columns).forEach { rowItems ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            rowItems.forEach { item ->
+                                PluginEmojiButton(
+                                    emojiItem = item,
+                                    defaultHeightDp = itemHeightDp,
+                                    backgroundColor = backgroundColor,
+                                    textColor = textColor,
+                                    onClick = {
+                                        val imageUrl = item.imageUrl
+                                        if (imageUrl != null && onImageEmojiSelect != null) {
+                                            onImageEmojiSelect(imageUrl)
+                                        } else if (imageUrl != null) {
+                                            val success =
+                                                clipboardManager.copyImageToSystemClipboard(
+                                                    imageUrl,
+                                                    item.displayText
+                                                )
+                                            if (success) {
+                                                Toast.makeText(
+                                                    context,
+                                                    "已复制表情，可粘贴发送",
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
                                             } else {
-                                                onEmojiSelect(item.insertText)
+                                                Toast.makeText(
+                                                    context,
+                                                    "复制失败",
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
                                             }
-                                        },
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                }
-                                repeat(columns - rowItems.size) {
-                                    Spacer(modifier = Modifier
-                                        .weight(1f)
-                                        .height((itemHeightDp).dp))
-                                }
+                                        } else {
+                                            onEmojiSelect(item.insertText)
+                                        }
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                )
                             }
-                            Spacer(modifier = Modifier.height(2.dp))
+                            repeat(columns - rowItems.size) {
+                                Spacer(modifier = Modifier
+                                    .weight(1f)
+                                    .height((itemHeightDp).dp))
+                            }
                         }
-                    } else {
-                        val emojis = category.emojis
-                        val columns = if (isLandscape) 15 else 8
+                        Spacer(modifier = Modifier.height(2.dp))
+                    }
+                } else {
+                    val emojis = category.emojis
+                    val columns = if (isLandscape) 15 else 8
 
-                        emojis.chunked(columns).forEach { rowEmojis ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(2.dp)
-                            ) {
-                                rowEmojis.forEach { emoji ->
-                                    EmojiButton(
-                                        emoji = emoji,
-                                        onClick = { onEmojiSelect(emoji) },
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                }
-                                repeat(columns - rowEmojis.size) {
-                                    Spacer(modifier = Modifier.weight(1f))
-                                }
+                    emojis.chunked(columns).forEach { rowEmojis ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            rowEmojis.forEach { emoji ->
+                                EmojiButton(
+                                    emoji = emoji,
+                                    onClick = { onEmojiSelect(emoji) },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                            repeat(columns - rowEmojis.size) {
+                                Spacer(modifier = Modifier.weight(1f))
                             }
                         }
                     }
