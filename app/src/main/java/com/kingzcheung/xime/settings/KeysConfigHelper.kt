@@ -3,46 +3,177 @@ package com.kingzcheung.xime.settings
 import android.content.Context
 import android.util.Log
 import com.charleskorn.kaml.Yaml
+import com.charleskorn.kaml.YamlConfiguration
+import com.charleskorn.kaml.YamlMap
+import com.charleskorn.kaml.YamlNode
+import com.charleskorn.kaml.YamlScalar
+import com.charleskorn.kaml.YamlList
+import com.kingzcheung.xime.keyboard.GestureAction
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerialName
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import java.io.BufferedReader
+import java.io.File
 import java.io.InputStreamReader
+
+// ── 键盘手势配置 ──
+
+data class GestureDef(
+    val label: String = "",
+    val action: GestureAction? = GestureAction.COMMIT,
+    val value: String = "",
+    val display: String = "key", // "key"（默认）显示在按键上, "bubble" 气泡显示
+)
+
+data class LongPressConfig(
+    val display: String = "key", // "key"（默认）显示在按键上, "bubble" 气泡弹出
+    val values: List<GestureDef> = emptyList(),
+)
+
+data class KeyGestureConfig(
+    val tap: GestureDef? = null,
+    val swipeUp: GestureDef? = null,
+    val swipeDown: GestureDef? = null,
+    val longPress: LongPressConfig? = null,
+)
+
+data class KeyboardConfig(
+    val keys: Map<String, KeyGestureConfig> = emptyMap(),
+)
+
+/**
+ * 从 YAML node 解析 KeyboardConfig。
+ *
+ * 支持两种格式：
+ * - 字符串 `"q"` → 等价于 GestureDef(label="q", action="commit", value="q")
+ * - 对象 `{ label: "复制", action: "copy" }` → 完整定义
+ */
+private fun parseKeyboardConfig(raw: com.charleskorn.kaml.YamlMap?): KeyboardConfig? {
+    if (raw == null) return null
+    val keysNode = raw["keys"] as? com.charleskorn.kaml.YamlMap ?: return KeyboardConfig()
+    val keys = mutableMapOf<String, KeyGestureConfig>()
+    for ((keyNode, valueNode) in keysNode.entries) {
+        val key = (keyNode as? com.charleskorn.kaml.YamlScalar)?.content ?: continue
+        val gestureMap = valueNode as? com.charleskorn.kaml.YamlMap ?: continue
+        keys[key] = parseKeyGestureConfig(gestureMap)
+    }
+    return KeyboardConfig(keys)
+}
+
+private fun parseKeyGestureConfig(map: com.charleskorn.kaml.YamlMap): KeyGestureConfig {
+    var tap: GestureDef? = null
+    var swipeUp: GestureDef? = null
+    var swipeDown: GestureDef? = null
+    var longPress: LongPressConfig? = null
+    for ((kNode, vNode) in map.entries) {
+        val name = (kNode as? com.charleskorn.kaml.YamlScalar)?.content ?: continue
+        when (name) {
+            "tap" -> tap = parseGestureNode(vNode)
+            "swipe_up" -> swipeUp = parseGestureNode(vNode)
+            "swipe_down" -> swipeDown = parseGestureNode(vNode)
+            "long_press" -> longPress = parseLongPress(vNode)
+        }
+    }
+    return KeyGestureConfig(tap, swipeUp, swipeDown, longPress)
+}
+
+/**
+ * 解析 long_press，支持两种格式：
+ *   新格式（推荐）：{ display: "bubble", values: ["q", "Q"] }
+ *   旧格式（兼容）：["q", "Q"]
+ */
+private fun parseLongPress(node: com.charleskorn.kaml.YamlNode): LongPressConfig? {
+    // 旧格式：纯数组 → 默认 display="key"
+    if (node is YamlList) {
+        val values = node.items.map { parseGestureNode(it) }.take(10)
+        return LongPressConfig(display = "key", values = values)
+    }
+    // 新格式：对象 { display, values }
+    if (node is com.charleskorn.kaml.YamlMap) {
+        var display = "key"
+        var values: List<GestureDef> = emptyList()
+        for ((k, v) in node.entries) {
+            val key = (k as? com.charleskorn.kaml.YamlScalar)?.content ?: continue
+            when (key) {
+                "display" -> display = (v as? com.charleskorn.kaml.YamlScalar)?.content ?: "key"
+                "values" -> if (v is YamlList) values = v.items.map { parseGestureNode(it) }.take(10)
+            }
+        }
+        return LongPressConfig(display = display, values = values)
+    }
+    return null
+}
+
+private fun parseGestureNode(node: com.charleskorn.kaml.YamlNode): GestureDef {
+    // 字符串 → commit
+    if (node is com.charleskorn.kaml.YamlScalar) {
+        val text = node.content
+        return GestureDef(label = text, action = GestureAction.COMMIT, value = text)
+    }
+    // 映射 → 完整定义
+    if (node is com.charleskorn.kaml.YamlMap) {
+        var label = ""
+        var action: GestureAction? = GestureAction.COMMIT
+        var value = ""
+        var display = "key"
+        for ((k, v) in node.entries) {
+            val key = (k as? com.charleskorn.kaml.YamlScalar)?.content ?: continue
+            val vStr = (v as? com.charleskorn.kaml.YamlScalar)?.content ?: continue
+            when (key) {
+                "label" -> label = vStr
+                "action" -> action = if (vStr == "null") null else GestureAction.fromValue(vStr)
+                "value" -> value = vStr
+                "display" -> display = vStr
+            }
+        }
+        return GestureDef(label = label, action = action, value = value, display = display)
+    }
+    return GestureDef()
+}
+
+private fun parseGestureList(node: com.charleskorn.kaml.YamlNode): List<GestureDef>? {
+    val list = node as? YamlList ?: return null
+    return list.items.map { parseGestureNode(it) }
+}
+
+// ── 原有配置类 ──
+
+@Serializable
+data class ColorSchemeEntry(
+    val name: String = "",
+    @SerialName("primary_color")
+    val primaryColor: Long = 0,
+)
+
+@Serializable
+data class StyleConfig(
+    @SerialName("color_scheme")
+    val colorScheme: String? = null,
+)
 
 @Serializable
 data class XimeConfig(
-    @SerialName("wubi_radicals")
-    val wubiRadicals: WubiRadicalsConfig? = null,
     @SerialName("xime_index")
-    val ximeIndex: XimeIndexConfig? = null
+    val ximeIndex: XimeIndexConfig? = null,
+    @SerialName("color_schemes")
+    val colorSchemes: Map<String, ColorSchemeEntry>? = null,
+    @SerialName("style")
+    val style: StyleConfig? = null,
+    @SerialName("customization")
+    val customization: Map<String, String>? = null,
 )
 
 @Serializable
 data class XimeIndexConfig(
-    /** 方案/插件/模型市场索引端点列表，下载器按顺序依次尝试。 */
     @SerialName("base_urls")
     val baseUrls: List<String> = listOf("https://index.ximei.me/")
 )
 
-@Serializable
-data class WubiRadicalsConfig(
-    val hotkeys: HotkeysConfig? = null,
-    val action: String? = null,
-    @SerialName("schema_radicals")
-    val schemaRadicals: Map<String, Map<String, String>> = emptyMap()
-)
-
-@Serializable
-data class HotkeysConfig(
-    @SerialName("show_key")
-    val showKey: String? = null,
-    @SerialName("show_all_keys")
-    val showAllKeys: String? = null
-)
-
 data class KeysConfig(
     val swipeUp: Map<String, String> = emptyMap(),
-    val swipeDownEnglish: Map<String, String> = emptyMap(),
-    val schemaRadicals: Map<String, Map<String, String>> = emptyMap()
+    val swipeDownEnglish: Map<String, String> = emptyMap()
 )
 
 object KeysConfigHelper {
@@ -50,17 +181,25 @@ object KeysConfigHelper {
     private const val XIME_CONFIG_FILE = "xime.yaml"
     private const val XIME_CUSTOM_CONFIG_FILE = "xime.custom.yaml"
     
-    private val yaml = Yaml.default
+    private val yaml = Yaml(configuration = YamlConfiguration(strictMode = false))
     
     private var config: KeysConfig = KeysConfig(
         swipeUp = getDefaultSwipeUp(),
         swipeDownEnglish = getDefaultSwipeDownEnglish()
     )
+
+    // 新：手势配置缓存
+    private var keyGestureConfig: Map<String, KeyGestureConfig> = emptyMap()
+    
+    /** 配置版本号，每次 loadConfig 时递增，用于 Compose 感知配置变更。 */
+    private val _configVersion = MutableStateFlow(0)
+    val configVersion: StateFlow<Int> = _configVersion.asStateFlow()
+    
+    private var mergedConfigCache: XimeConfig? = null
+    private var mergedConfigVersion = 0
     
     fun loadConfig(context: Context): KeysConfig {
         loadXimeConfig(context)
-        // loadConfig 负责加载 xime.yaml 中的 schemaRadicals（字根配置），
-        // swipeUp/swipeDownEnglish 的默认值已在初始值中内置。
         config = config.copy(
             swipeUp = getDefaultSwipeUp(),
             swipeDownEnglish = getDefaultSwipeDownEnglish()
@@ -70,21 +209,55 @@ object KeysConfigHelper {
     
     private fun loadXimeConfig(context: Context) {
         try {
-            val merged = loadMergedConfig(context)
-            val schemaRadicals = merged.wubiRadicals?.schemaRadicals ?: emptyMap()
-            config = config.copy(schemaRadicals = schemaRadicals)
-            Log.d(TAG, "Loaded schema radicals from $XIME_CONFIG_FILE + $XIME_CUSTOM_CONFIG_FILE: ${schemaRadicals.keys}")
+            // 键盘手势（从原始 YAML 手动解析）
+            keyGestureConfig = parseKeyboardFromAssets(context) ?: emptyMap()
+            _configVersion.value++
+            Log.d(TAG, "Loaded config: ${keyGestureConfig.size} keys (v${_configVersion.value})")
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to load xime config, use default", e)
-            config = config.copy(schemaRadicals = getDefaultSchemaRadicals())
+            Log.w(TAG, "Failed to load xime config", e)
         }
     }
 
-    /** 读取并合并 xime.yaml + xime.custom.yaml，custom 覆盖 default。 */
+    /** 从 xime.yaml + xime.custom.yaml 合并解析键盘手势配置。 */
+    private fun parseKeyboardFromAssets(context: Context): Map<String, KeyGestureConfig>? {
+        val defaultText = readAssetText(context, XIME_CONFIG_FILE) ?: return null
+        val default = parseKeyboardYamlText(defaultText) ?: return null
+        // 优先从用户数据目录读取自定义覆盖
+        val customText = readUserDataText(context, XIME_CUSTOM_CONFIG_FILE)
+            ?: readAssetText(context, XIME_CUSTOM_CONFIG_FILE)
+        val custom = customText?.let { parseKeyboardYamlText(it) } ?: return default
+        // 合并：自定义覆盖同名键，默认填充其余键
+        return default + custom
+    }
+
+    /** 从 YAML 文本中提取 keyboard.keys 段。 */
+    private fun parseKeyboardYamlText(yamlText: String): Map<String, KeyGestureConfig>? {
+        val root = yaml.parseToYamlNode(yamlText) as? YamlMap ?: return null
+        val keyboardNode = root["keyboard"] as? YamlMap ?: return null
+        val keysNode = keyboardNode["keys"] as? YamlMap ?: return null
+        val result = mutableMapOf<String, KeyGestureConfig>()
+        for ((kNode, vNode) in keysNode.entries) {
+            val key = (kNode as? YamlScalar)?.content ?: continue
+            val gestureMap = vNode as? YamlMap ?: continue
+            result[key] = parseKeyGestureConfig(gestureMap)
+        }
+        return result
+    }
+
     private fun loadMergedConfig(context: Context): XimeConfig {
+        val currentVersion = _configVersion.value
+        if (mergedConfigCache != null && mergedConfigVersion == currentVersion) {
+            return mergedConfigCache!!
+        }
         val default = parseConfig(readAssetText(context, XIME_CONFIG_FILE))
-        val custom = parseConfig(readAssetText(context, XIME_CUSTOM_CONFIG_FILE))
-        return mergeConfig(default, custom)
+        val customText = readUserDataText(context, XIME_CUSTOM_CONFIG_FILE)
+            ?: readAssetText(context, XIME_CUSTOM_CONFIG_FILE)
+        Log.d(TAG, "loadMergedConfig: customText=${customText != null}, len=${customText?.length}")
+        val custom = parseConfig(customText)
+        val config = mergeConfig(default, custom)
+        mergedConfigCache = config
+        mergedConfigVersion = currentVersion
+        return config
     }
 
     private fun parseConfig(content: String?): XimeConfig? {
@@ -97,17 +270,17 @@ object KeysConfigHelper {
         }
     }
 
-    /** 合并两个 XimeConfig：custom 中非 null 的字段覆盖 default。 */
     private fun mergeConfig(default: XimeConfig?, custom: XimeConfig?): XimeConfig {
         if (custom == null) return default ?: XimeConfig()
         if (default == null) return custom
         return XimeConfig(
-            wubiRadicals = custom.wubiRadicals ?: default.wubiRadicals,
             ximeIndex = custom.ximeIndex ?: default.ximeIndex,
+            colorSchemes = custom.colorSchemes ?: default.colorSchemes,
+            style = custom.style ?: default.style,
+            customization = custom.customization ?: default.customization,
         )
     }
 
-    /** 读取 assets 中的 YAML 文件内容，文件不存在时返回 null。 */
     private fun readAssetText(context: Context, fileName: String): String? {
         return try {
             val inputStream = context.assets.open(fileName)
@@ -117,30 +290,86 @@ object KeysConfigHelper {
             inputStream.close()
             content
         } catch (e: Exception) {
-            null // 文件不存在或读取失败
+            null
         }
     }
 
-    /** 加载 xime-index 配置：从合并后的配置中提取 xime_index 段。 */
+    /** 从用户数据目录 (context.filesDir/rime/) 读取文件。 */
+    private fun readUserDataText(context: Context, fileName: String): String? {
+        val file = File(context.filesDir, "rime/$fileName")
+        Log.d(TAG, "readUserDataText: path=${file.absolutePath}, exists=${file.exists()}")
+        if (!file.exists()) return null
+        return try {
+            val text = file.readText()
+            Log.d(TAG, "readUserDataText: read ${text.length} chars, first 80=${text.take(80)}")
+            text
+        } catch (e: Exception) {
+            Log.w(TAG, "readUserDataText: failed", e)
+            null
+        }
+    }
+
     fun loadXimeIndexConfig(context: Context): XimeIndexConfig {
         val merged = loadMergedConfig(context)
         return merged.ximeIndex ?: XimeIndexConfig()
     }
+
+    /** 从 xime.yaml 加载 color_schemes 配置。 */
+    fun loadColorSchemes(context: Context): Map<String, ColorSchemeEntry> {
+        val merged = loadMergedConfig(context)
+        return merged.colorSchemes ?: emptyMap()
+    }
+
+    /** 从 xime.yaml 加载默认主题 ID（style.color_scheme）。 */
+    fun loadDefaultThemeId(context: Context): String {
+        val merged = loadMergedConfig(context)
+        return merged.style?.colorScheme ?: "lavender_purple"
+    }
+
+    // ── 新公开 API ──
+
+    /** 获取某个按键的手势配置。 */
+    fun getKeyGesture(key: String): KeyGestureConfig? = keyGestureConfig[key.lowercase()]
+
+    /** 获取某个按键指定手势的显示标签。 */
+    fun getGestureLabel(key: String, gesture: String): String? {
+        val kc = keyGestureConfig[key.lowercase()] ?: return null
+        return when (gesture) {
+            "tap" -> kc.tap?.label
+            "swipe_up" -> kc.swipeUp?.label
+            "swipe_down" -> kc.swipeDown?.label
+            "long_press" -> kc.longPress?.values?.firstOrNull()?.label
+            else -> null
+        }
+    }
+
+    // ── 旧公开 API（兼容） ──
     
     fun getConfig(): KeysConfig = config
     
-    fun getSwipeUpText(key: String): String? = config.swipeUp[key.lowercase()]
-    
-    fun getSwipeDownEnglishText(key: String): String? = config.swipeDownEnglish[key.lowercase()]
-    
-    fun getSwipeDownWubiText(key: String, schemaId: String): String? {
-        val radicals = config.schemaRadicals[schemaId] ?: return null
-        return radicals[key.lowercase()]
+    fun getSwipeUpText(key: String): String? {
+        val fromYaml = keyGestureConfig[key.lowercase()]?.swipeUp?.value
+        if (fromYaml != null && fromYaml.isNotEmpty()) return fromYaml
+        return config.swipeUp[key.lowercase()]
     }
     
-    fun hasSchemaRadicals(schemaId: String): Boolean {
-        return config.schemaRadicals.containsKey(schemaId)
+    fun getSwipeDownEnglishText(key: String): String? {
+        val fromYaml = keyGestureConfig[key.lowercase()]?.swipeDown?.label
+        if (fromYaml != null && fromYaml.isNotEmpty()) return fromYaml
+        return config.swipeDownEnglish[key.lowercase()]
     }
+
+    /** 获取下滑动作类型 */
+    fun getSwipeDownAction(key: String): GestureAction? {
+        return keyGestureConfig[key.lowercase()]?.swipeDown?.action
+    }
+
+    /** 获取下滑显示位置：key（按键上）或 bubble（气泡） */
+    fun getSwipeDownDisplay(key: String): String {
+        return keyGestureConfig[key.lowercase()]?.swipeDown?.display ?: "key"
+    }
+    
+
     
     private fun getDefaultSwipeUp(): Map<String, String> = mapOf(
         "q" to "1", "w" to "2", "e" to "3", "r" to "4", "t" to "5",
@@ -160,60 +389,5 @@ object KeysConfigHelper {
         "n" to "N", "m" to "M"
     )
     
-    private fun getDefaultSchemaRadicals(): Map<String, Map<String, String>> = mapOf(
-        "wubi86" to mapOf(
-            "g" to "王龶五一戋",
-            "f" to "土士二干十寸雨",
-            "d" to "大犬三古龵镸石厂丆",
-            "s" to "木丁西",
-            "a" to "工匚戈艹廿龷七弋戈",
-            "h" to "目丨卜⺊上止龰",
-            "j" to "日曰早廾刂虫丿Ⅱ",
-            "k" to "口Ⅲ川",
-            "l" to "田甲囗四罒车皿力",
-            "m" to "山由贝冂冎几",
-            "t" to "禾竹丿𠂉彳夂攵",
-            "r" to "白手龵扌斤𰀪𠂆",
-            "e" to "月⺼彡乃用爫彡𧘇豕",
-            "w" to "人亻八癶",
-            "q" to "金 钅𠂊勺㐅 犭𱼀",
-            "y" to "言讠文方广亠丶乀",
-            "u" to "立六辛冫丬门疒丷䒑",
-            "i" to "水氵小氺头𭕄⺌",
-            "o" to "火灬米",
-            "p" to "之辶冖宀廴礻",
-            "n" to "已己巳心忄羽乙𠃜",
-            "b" to "子耳了也阝卩㔾凵",
-            "v" to "女刀九臼巛彐",
-            "c" to "又巴马厶龴ス",
-            "x" to "弓匕纟幺弓𠤎"
-        ),
-        "wubi86_pinyin" to mapOf(
-            "g" to "王龶五一戋",
-            "f" to "土士二干十寸雨",
-            "d" to "大犬三古龵镸石厂丆",
-            "s" to "木丁西",
-            "a" to "工匚戈艹廿龷七弋戈",
-            "h" to "目丨卜⺊上止龰",
-            "j" to "日曰早廾刂虫丿Ⅱ",
-            "k" to "口Ⅲ川",
-            "l" to "田甲囗四罒车皿力",
-            "m" to "山由贝冂冎几",
-            "t" to "禾竹丿𠂉彳夂攵",
-            "r" to "白手龵扌斤𰀪𠂆",
-            "e" to "月⺼彡乃用爫彡𧘇豕",
-            "w" to "人亻八癶",
-            "q" to "金 钅𠂊勺㐅 犭𱼀",
-            "y" to "言讠文方广亠丶乀",
-            "u" to "立六辛冫丬门疒丷䒑",
-            "i" to "水氵小氺头𭕄⺌",
-            "o" to "火灬米",
-            "p" to "之辶冖宀廴礻",
-            "n" to "已己巳心忄羽乙𠃜",
-            "b" to "子耳了也阝卩㔾凵",
-            "v" to "女刀九臼巛彐",
-            "c" to "又巴马厶龴ス",
-            "x" to "弓匕纟幺弓𠤎"
-        )
-    )
+
 }

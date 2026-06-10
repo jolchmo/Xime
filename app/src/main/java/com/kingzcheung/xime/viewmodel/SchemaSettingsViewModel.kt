@@ -5,7 +5,9 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.kingzcheung.xime.rime.RimeEngine
+import com.kingzcheung.xime.settings.KeysConfigHelper
 import com.kingzcheung.xime.settings.SchemaManager
+import com.kingzcheung.xime.ui.theme.KeyboardThemes
 import com.kingzcheung.xime.settings.SchemaMeta
 import com.kingzcheung.xime.settings.SettingsPreferences
 import kotlinx.coroutines.Dispatchers
@@ -63,8 +65,12 @@ class SchemaSettingsViewModel(application: Application) : AndroidViewModel(appli
         } else {
             enabled.add(schema.schemaId)
         }
-        SchemaManager.setEnabledSchemas(context, enabled)
-        _uiState.update { it.copy(enabledSchemas = enabled) }
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                SchemaManager.setEnabledSchemas(context, enabled)
+            }
+            _uiState.update { it.copy(enabledSchemas = enabled) }
+        }
     }
 
     fun selectSchema(schema: SchemaMeta) {
@@ -107,15 +113,19 @@ class SchemaSettingsViewModel(application: Application) : AndroidViewModel(appli
     }
 
     fun deleteSchema(schema: SchemaMeta) {
-        SchemaManager.deleteSchemaFiles(context, schema.schemaId)
-        if (_uiState.value.currentSchema == schema.schemaId) {
-            val remaining = _uiState.value.allSchemas.firstOrNull { it.schemaId != schema.schemaId }
-            if (remaining != null) {
-                selectSchema(remaining)
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                SchemaManager.deleteSchemaFiles(context, schema.schemaId)
             }
+            if (_uiState.value.currentSchema == schema.schemaId) {
+                val remaining = _uiState.value.allSchemas.firstOrNull { it.schemaId != schema.schemaId }
+                if (remaining != null) {
+                    selectSchema(remaining)
+                }
+            }
+            refresh()
+            showToast("${schema.name} 已删除")
         }
-        refresh()
-        showToast("${schema.name} 已删除")
     }
 
     fun deploySchema() {
@@ -123,6 +133,9 @@ class SchemaSettingsViewModel(application: Application) : AndroidViewModel(appli
         viewModelScope.launch {
             _uiState.update { it.copy(isDeploying = true) }
             val success = withContext(Dispatchers.IO) {
+                // 部署前重新加载 xime 手势配置和配色方案（用户可能更新了 xime.custom.yaml）
+                KeysConfigHelper.loadConfig(context)
+                KeyboardThemes.reload(context)
                 val engine = RimeEngine.getInstance()
                 engine.deploy()
             }

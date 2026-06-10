@@ -4,6 +4,7 @@ import android.content.Intent
 import android.inputmethodservice.InputMethodService
 import android.os.Build
 import android.os.Handler
+import android.os.SystemClock
 import android.os.Looper
 import android.util.Log
 import android.view.KeyEvent
@@ -47,20 +48,23 @@ import com.kingzcheung.xime.settings.SchemaConfigHelper
 import com.kingzcheung.xime.settings.SchemaManager
 import com.kingzcheung.xime.settings.SettingsPreferences
 import com.kingzcheung.xime.ui.KeyboardView
+import com.kingzcheung.xime.ui.theme.KeyboardThemes
 import com.kingzcheung.xime.settings.KeysConfigHelper
 import com.kingzcheung.xime.ui.theme.XimeTheme
 import com.kingzcheung.xime.util.FileLogger
+import com.kingzcheung.xime.keyboard.ActionExecutor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileInputStream
 
-class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateRegistryOwner {
+class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateRegistryOwner, ActionExecutor {
 
     companion object {
         private const val TAG = "XimeInputMethodService"
@@ -114,6 +118,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     )
     
     private var sharedPrefsListener: android.content.SharedPreferences.OnSharedPreferenceChangeListener? = null
+    private var clipboardCollectorJob: kotlinx.coroutines.Job? = null
     
     private val feedbackManager = FeedbackManager(this)
     
@@ -236,7 +241,9 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         // 必须在任何异步操作之前同步加载键盘按键配置，
         // 否则 KeyboardLayout 组合时 swipeUp/swipeDown 配置可能尚未就绪，
         // 导致按键上的符号不显示、上滑/下滑手势不触发。
-        KeysConfigHelper.loadConfig(this)
+        runBlocking(Dispatchers.IO) {
+            KeysConfigHelper.loadConfig(this@XimeInputMethodService)
+        }
         
         RimeEngine.setDeploymentCallback { isDeploying, message ->
             serviceScope.launch(Dispatchers.Main) {
@@ -511,6 +518,9 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                                     sendDownUpKeyEvents(keyCode)
                                 }
                             },
+                            onGestureAction = { action, value ->
+                                action.execute(this@XimeInputMethodService, value)
+                            },
                             onCandidateSelect = { index ->
                                 selectCandidate(index)
                             },
@@ -733,6 +743,48 @@ onVoiceModeChange = { enabled ->
         return keyboardContainer
     }
     
+    // ── ActionExecutor 实现 ──
+
+    override fun performEditorMenuAction(actionId: Int) {
+        when (actionId) {
+            android.R.id.undo -> {
+                // performContextMenuAction 对 undo 支持不一致，改用 Ctrl+Z 键盘快捷键
+                val now = SystemClock.uptimeMillis()
+                currentInputConnection?.sendKeyEvent(
+                    KeyEvent(now, now, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_Z, 0, KeyEvent.META_CTRL_ON)
+                )
+                currentInputConnection?.sendKeyEvent(
+                    KeyEvent(now, now, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_Z, 0, KeyEvent.META_CTRL_ON)
+                )
+            }
+            else -> currentInputConnection?.performContextMenuAction(actionId)
+        }
+    }
+
+    override fun sendKeyEvent(keyCode: Int) {
+        currentInputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, keyCode))
+        currentInputConnection?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, keyCode))
+    }
+
+    override fun executeCommand(name: String) {
+        when (name) {
+            "clear_composition" -> {
+                rimeEngine.clearComposition()
+                mainHandler.post { updateUI() }
+            }
+            else -> Log.w(TAG, "Unknown command: $name")
+        }
+    }
+
+    override fun repeatLastInput() {
+        val lastText = predictionManager.lastCommittedText
+        if (lastText.isNotEmpty()) {
+            currentInputConnection?.commitText(lastText, 1)
+        }
+    }
+
+    // ── 原有方法 ──
+
     private fun performUndo() {
         val currentTextBeforeCursor = currentInputConnection?.getTextBeforeCursor(1000, 0)?.toString() ?: ""
         val currentLength = currentTextBeforeCursor.length
@@ -822,7 +874,8 @@ onVoiceModeChange = { enabled ->
         }
 
         // 监听clipboardItems变化，更新候选栏
-        serviceScope.launch {
+        clipboardCollectorJob?.cancel()
+        clipboardCollectorJob = serviceScope.launch {
             clipboardManager.clipboardItems.collect { _ ->
                 val items = clipboardManager.getRecentItems(30)
                 recentClipboardItemsState.value = items
@@ -908,6 +961,7 @@ onVoiceModeChange = { enabled ->
         sharedPrefsListener?.let {
             SettingsPreferences.getPrefsPublic(this).unregisterOnSharedPreferenceChangeListener(it)
         }
+        RimeEngine.setDeploymentCallback { _, _ -> }
         feedbackManager.release()
         rimeEngine.destroy()
         voiceRecognitionHandler.release()
@@ -1434,6 +1488,7 @@ onVoiceModeChange = { enabled ->
     }
     
     private fun reloadConfig() {
+        Log.d(TAG, "========== reloadConfig CALLED ==========")
         Log.d(TAG, "Deploying schema...")
         
         mainHandler.post {
@@ -1441,9 +1496,11 @@ onVoiceModeChange = { enabled ->
             android.widget.Toast.makeText(this, "方案部署中...", android.widget.Toast.LENGTH_SHORT).show()
         }
         
-        Thread {
+        serviceScope.launch(Dispatchers.IO) {
             try {
-                KeysConfigHelper.loadConfig(this)
+                KeysConfigHelper.loadConfig(this@XimeInputMethodService)
+                // 重新加载配色方案（用户可能在 xime.custom.yaml 中修改了 color_schemes）
+                KeyboardThemes.reload(this@XimeInputMethodService)
                 
                 val userDataDir = File(filesDir, "rime")
                 
@@ -1466,7 +1523,7 @@ onVoiceModeChange = { enabled ->
                 val availableSchemas = rimeEngine.getAvailableSchemas()
                 Log.d(TAG, "Available schemas: ${availableSchemas.joinToString()}")
                 
-                val savedSchema = SettingsPreferences.getCurrentSchema(this)
+                val savedSchema = SettingsPreferences.getCurrentSchema(this@XimeInputMethodService)
                 Log.d(TAG, "Saved schema: $savedSchema")
                 if (savedSchema in availableSchemas) {
                     val switchResult = rimeEngine.switchSchema(savedSchema)
@@ -1475,16 +1532,16 @@ onVoiceModeChange = { enabled ->
                     Log.w(TAG, "Schema $savedSchema not found in available schemas")
                 }
                 
-                mainHandler.post {
+                withContext(Dispatchers.Main) {
                     updateSchemaName()
                     updateUI()
-                    android.widget.Toast.makeText(this, "方案部署完成", android.widget.Toast.LENGTH_SHORT).show()
+                    android.widget.Toast.makeText(this@XimeInputMethodService, "方案部署完成", android.widget.Toast.LENGTH_SHORT).show()
                     Log.d(TAG, "Schema deployed successfully")
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to reload config", e)
             }
-        }.start()
+        }
     }
     
     private fun deploySchema() {
@@ -1544,8 +1601,13 @@ onVoiceModeChange = { enabled ->
     }
     
     private fun deploy() {
+        Log.d(TAG, "========== deploy() CALLED ==========")
         Log.d(TAG, "Deploying schemas")
         serviceScope.launch(Dispatchers.IO) {
+            // 部署前刷新手势配置和配色方案缓存
+            KeysConfigHelper.loadConfig(this@XimeInputMethodService)
+            KeyboardThemes.reload(this@XimeInputMethodService)
+            
             notifyDeploymentStatus(true, "正在部署...")
             
             val success = rimeEngine.deploy()
@@ -1575,7 +1637,7 @@ onVoiceModeChange = { enabled ->
         Toast.makeText(this, "键盘高度已调整", Toast.LENGTH_SHORT).show()
     }
 
-    private fun commitText(text: String) {
+    override fun commitText(text: String) {
         currentInputConnection?.commitText(text, 1)
         predictionManager.appendCommittedText(text)
         

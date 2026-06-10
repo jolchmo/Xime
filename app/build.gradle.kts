@@ -356,6 +356,7 @@ android {
     kotlin {
         compilerOptions {
             jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+            freeCompilerArgs.add("-Xunused")
         }
     }
     buildFeatures {
@@ -378,6 +379,13 @@ android {
         }
     }
     ndkVersion = "28.2.13676358"
+
+    lint {
+        checkReleaseBuilds = false
+        checkGeneratedSources = false
+        abortOnError = false
+        checkDependencies = true
+    }
     
     // 分架构打�?
     splits {

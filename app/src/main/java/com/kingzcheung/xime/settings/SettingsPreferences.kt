@@ -29,7 +29,12 @@ object SettingsPreferences {
     
     private const val KEY_PUNCTUATION_MODEL_ENABLED = "punctuation_model_enabled"
     
-    private const val KEY_SWIPE_DOWN_SHOW_ROOTS = "swipe_down_show_roots"
+    /** 默认主题 ID，可从 xime.yaml 的 style.color_scheme 初始化。 */
+    @JvmStatic
+    var defaultKeyboardTheme: String = "lavender_purple"
+    
+    const val KEY_SWIPE_UP_HINTS_ENABLED = "swipe_up_hints_enabled"
+    const val KEY_SWIPE_DOWN_HINTS_ENABLED = "swipe_down_hints_enabled"
     
     private const val KEY_KEYBOARD_HEIGHT_DP = "keyboard_height_dp"
     private const val KEY_KEYBOARD_HEIGHT_DP_LANDSCAPE = "keyboard_height_dp_landscape"
@@ -133,7 +138,7 @@ object SettingsPreferences {
     }
     
     fun getKeyboardTheme(context: Context): String {
-        return getPrefs(context).getString(KEY_KEYBOARD_THEME, "lavender_purple") ?: "lavender_purple"
+        return getPrefs(context).getString(KEY_KEYBOARD_THEME, defaultKeyboardTheme) ?: defaultKeyboardTheme
     }
     
     fun setKeyboardTheme(context: Context, themeId: String) {
@@ -229,12 +234,20 @@ object SettingsPreferences {
         getPrefs(context).edit().putBoolean(KEY_PUNCTUATION_MODEL_ENABLED, enabled).apply()
     }
     
-    fun isSwipeDownShowRootsEnabled(context: Context): Boolean {
-        return getPrefs(context).getBoolean(KEY_SWIPE_DOWN_SHOW_ROOTS, false)
+    fun isSwipeUpHintsEnabled(context: Context): Boolean {
+        return getPrefs(context).getBoolean(KEY_SWIPE_UP_HINTS_ENABLED, true)
     }
     
-    fun setSwipeDownShowRootsEnabled(context: Context, enabled: Boolean) {
-        getPrefs(context).edit().putBoolean(KEY_SWIPE_DOWN_SHOW_ROOTS, enabled).apply()
+    fun setSwipeUpHintsEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_SWIPE_UP_HINTS_ENABLED, enabled).apply()
+    }
+    
+    fun isSwipeDownHintsEnabled(context: Context): Boolean {
+        return getPrefs(context).getBoolean(KEY_SWIPE_DOWN_HINTS_ENABLED, true)
+    }
+    
+    fun setSwipeDownHintsEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_SWIPE_DOWN_HINTS_ENABLED, enabled).apply()
     }
     
     fun getKeyboardHeightDp(context: Context): Int {
