@@ -29,6 +29,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -123,12 +124,18 @@ fun KeyboardView(
     onGestureAction: ((GestureAction, String) -> Unit)? = null,
     toolbarButtons: List<String> = ToolbarButton.DEFAULT_VISIBLE.map { it.id },
     onUpdateToolbarButtons: ((List<String>) -> Unit)? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onKeyboardModeChange: ((Boolean) -> Unit)? = null,
 ) {
     var isShifted by remember { mutableStateOf(false) }
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     var keyboardState by remember { mutableStateOf(initialKeyboardLayoutState(isAsciiMode)) }
     var currentRoute by remember { mutableStateOf<KeyboardRoute>(KeyboardRoute.Keyboard) }
+
+    SideEffect {
+        val active = keyboardState is KeyboardLayoutState.Chinese && currentRoute == KeyboardRoute.Keyboard
+        onKeyboardModeChange?.invoke(active)
+    }
 
     val kbColors = KeysConfigHelper.getKeyboardColors()
     val longToColor: (Long) -> Color = { Color(0xFF000000 or it) }

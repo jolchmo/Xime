@@ -123,6 +123,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     private var isTrackingVoiceButtons = false
     private var voiceRecordingStarted = false
     private var lastClearedText: String = ""
+    private var isChineseMode = true
     
     private val calculatorEngine = com.kingzcheung.xime.calculator.CalculatorEngine()
     
@@ -717,6 +718,9 @@ onVoiceModeChange = { enabled ->
                                onUpdateToolbarButtons = { buttons ->
                                    SettingsPreferences.setToolbarButtons(this@XimeInputMethodService, buttons)
                                    uiState.value = uiState.value.copy(toolbarButtons = buttons)
+                               },
+                               onKeyboardModeChange = { chineseMode ->
+                                   isChineseMode = chineseMode
                                }
                                 )
                          }
@@ -1208,7 +1212,7 @@ onVoiceModeChange = { enabled ->
                         predictionManager.deleteLastChar()
                         Log.d(TAG, "Delete committed text, remaining: '${predictionManager.lastCommittedText}'")
                         
-                        if (!state.isAsciiMode && SettingsPreferences.isSmartPredictionEnabled(this@XimeInputMethodService) && predictionManager.lastCommittedText.isNotEmpty()) {
+                        if (!state.isAsciiMode && isChineseMode && SettingsPreferences.isSmartPredictionEnabled(this@XimeInputMethodService) && predictionManager.lastCommittedText.isNotEmpty()) {
                             val candidates = predictionManager.getChineseAssociations(predictionManager.lastCommittedText, 20)
                             uiState.value = uiState.value.copy(associationCandidates = candidates)
                         } else {
@@ -1771,13 +1775,15 @@ onVoiceModeChange = { enabled ->
 
     override fun commitText(text: String) {
         currentInputConnection?.commitText(text, 1)
-        predictionManager.appendCommittedText(text)
-        
-        predictionManager.recordInput(text)
-        
-        mainHandler.post {
-            if (!uiState.value.isAsciiMode) {
-                getPredictionFromPlugin(predictionManager.lastCommittedText)
+
+        if (isChineseMode) {
+            predictionManager.appendCommittedText(text)
+            predictionManager.recordInput(text)
+
+            mainHandler.post {
+                if (!uiState.value.isAsciiMode) {
+                    getPredictionFromPlugin(predictionManager.lastCommittedText)
+                }
             }
         }
     }
