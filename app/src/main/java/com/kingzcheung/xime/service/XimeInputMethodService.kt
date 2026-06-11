@@ -50,6 +50,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.core.content.FileProvider
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
+import kotlinx.coroutines.asCoroutineDispatcher
 import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.savedstate.SavedStateRegistry
@@ -109,6 +110,9 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     private lateinit var keyboardContainer: VoiceKeyboardContainer
     
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val keyProcessingDispatcher = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+        Thread(r, "key-process").also { it.isDaemon = true }
+    }.asCoroutineDispatcher()
     
     private val mainHandler = Handler(Looper.getMainLooper())
     
@@ -1171,11 +1175,7 @@ onVoiceModeChange = { enabled ->
     }
 
     private fun handleKeyPress(key: String, isShifted: Boolean) {
-        val targetDispatcher = when (key) {
-            "space", "enter", "delete", "clear_composition", "clear_all" -> Dispatchers.IO
-            else -> Dispatchers.Default
-        }
-        serviceScope.launch(targetDispatcher) {
+        serviceScope.launch(keyProcessingDispatcher) {
             val state = uiState.value
             var needsUIUpdate = false
             
@@ -1591,7 +1591,7 @@ onVoiceModeChange = { enabled ->
                 candidateComments = emptyArray()
             )
         } else {
-            serviceScope.launch(Dispatchers.Default) {
+            serviceScope.launch(keyProcessingDispatcher) {
                 selectCandidateAsync(index)
             }
         }

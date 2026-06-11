@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -30,6 +31,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -239,8 +241,14 @@ fun CandidateBar(
 //                Spacer(modifier = Modifier.width(2.dp))
                 }
 
+                val candidateListState = rememberLazyListState()
+                LaunchedEffect(displayCandidates) {
+                    candidateListState.scrollToItem(0)
+                }
+
                 LazyRow(
                     modifier = Modifier.weight(1f),
+                    state = candidateListState,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     itemsIndexed(displayCandidates, key = { index, candidate -> index }) { index, candidate ->
