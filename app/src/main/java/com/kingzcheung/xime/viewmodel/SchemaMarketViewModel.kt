@@ -108,7 +108,7 @@ class SchemaMarketViewModel(application: Application) : AndroidViewModel(applica
             _uiState.update { it.copy(installingId = item.scheme.id) }
             // 依赖包 id → 下载 URL，取自已加载的方案列表（含登记为库包的条目）
             val urlById = _uiState.value.schemes.associate { si ->
-                si.scheme.id to si.scheme.resolvedVersion()?.downloadUrl
+                si.scheme.id to si.scheme.resolvedVersion()?.downloadUrls?.firstOrNull()?.url
             }
             val result = withContext(Dispatchers.IO) {
                 XimeIndexSource.installScheme(context, item.scheme) { id ->

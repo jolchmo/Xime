@@ -59,12 +59,21 @@ data class MarketScheme(
         versions.firstOrNull { it.version == currentVersion } ?: versions.firstOrNull()
 }
 
+/** 下载条目（多文件时 downloadUrl 数组中的单条）。 */
+@Serializable
+data class DownloadItem(
+    val url: String = "",
+    val sha256: String = "",
+    val size: String = "",
+)
+
 @Serializable
 data class SchemeVersion(
     val version: String = "",
     val date: String = "",
     val changelog: String = "",
-    @SerialName("downloadUrl") val downloadUrl: String = "",
+    @SerialName("downloadUrl")
+    val downloadUrls: List<DownloadItem> = emptyList(),
     val size: String = "",
     val sha256: String = "",
 )

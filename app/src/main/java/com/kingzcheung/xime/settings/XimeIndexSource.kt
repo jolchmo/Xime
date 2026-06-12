@@ -4,9 +4,6 @@ import android.content.Context
 import android.util.Log
 import com.kingzcheung.xime.settings.KeysConfigHelper
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -61,87 +58,88 @@ object XimeIndexSource {
         .followRedirects(true)
         .build()
 
-    /** 取文本的结果：成功带命中来源 [base]+[text]；失败时 [error] 记录最后一个源的可读原因。 */
-    private data class TextFetch(val base: String? = null, val text: String? = null, val error: String? = null)
-
-    /** 按镜像优先级取一个 repo 相对路径的文本；首个 2xx 即返回，全失败返回带原因的结果。 */
-    private fun fetchTextWithSource(repoPath: String): TextFetch {
-        var lastError = "网络不可用"
-        for (base in mirrors) {
-            val host = hostOf(base)
-            try {
-                client.newCall(Request.Builder().url(base + repoPath).build()).execute().use { resp ->
-                    if (resp.isSuccessful) {
-                        val s = resp.body?.string()
-                        if (!s.isNullOrBlank()) return TextFetch(base = base, text = s)
-                        lastError = "$host 返回空内容"
-                    } else {
-                        lastError = "$host HTTP ${resp.code}"
-                    }
-                }
-            } catch (e: Exception) {
-                lastError = "$host ${friendlyCause(e)}"
-                Log.w(TAG, "fetch $base$repoPath failed: ${e.message}")
-            }
-        }
-        return TextFetch(error = lastError)
-    }
-
-    private fun fetchText(repoPath: String): String? = fetchTextWithSource(repoPath).text
-
-    /** 把网络异常转成可读原因（超时 / 无法解析域名 / 无法连接…），免得给用户抛英文堆栈。 */
-    private fun friendlyCause(e: Throwable): String = when (e) {
-        is java.net.UnknownHostException -> "无法解析域名(网络不可用?)"
-        is java.net.SocketTimeoutException -> "连接超时"
-        is java.net.ConnectException -> "无法连接"
-        is javax.net.ssl.SSLException -> "SSL 错误"
-        else -> e.message ?: e.javaClass.simpleName
-    }
-
     /** 镜像 base → 展示用主机名（如 index.ximei.me / fastly.jsdelivr.net）。 */
     private fun hostOf(base: String): String =
         base.substringAfter("://").substringBefore("/")
 
-    /** 跟随索引跳转：根 → 子 → 逐方案（并行、部分失败容忍）。 */
+    /** 跟随索引跳转：根 → 子 → 逐方案（并行、部分失败容忍）。逐个镜像尝试直到获取到方案。 */
     suspend fun fetchSchemes(context: Context, appVersion: String): Result<SchemesFetch> =
         withContext(Dispatchers.IO) {
             ensureConfigured(context)
             try {
-                val rootFetch = fetchTextWithSource("index.yaml")
-                val rootText = rootFetch.text
-                    ?: return@withContext Result.failure(
-                        IOException("无法连接到方案市场，请检查网络"),
-                    )
-                val source = hostOf(rootFetch.base!!)
-                val root = XimeIndexParser.parseIndex(rootText)
-                val subPath = XimeIndexParser.resolveRepoPath(
-                    "index.yaml", root.schemas?.from ?: "./rimes/index.yaml",
-                )
-                val subFetch = fetchTextWithSource(subPath)
-                val subText = subFetch.text
-                    ?: return@withContext Result.failure(
-                        IOException("方案列表加载失败（${subFetch.error}）"),
-                    )
-                val sub = XimeIndexParser.parseSubIndex(subText)
-
-                val schemes = coroutineScope {
-                    sub.schemas.map { entry ->
-                        async {
-                            val p = XimeIndexParser.resolveRepoPath(subPath, entry.file)
-                            val text = fetchText(p) ?: return@async null
-                            runCatching { XimeIndexParser.parseScheme(text) }.getOrNull()
-                        }
-                    }.awaitAll()
-                }.filterNotNull()
-                    .distinctBy { it.id }
-                    .map { XimeIndexParser.toItem(it, appVersion) }
-
-                Result.success(SchemesFetch(schemes, source))
+                // 遍历所有镜像，第一个成功获取到方案的返回
+                for (base in mirrors) {
+                    val result = tryFetchFromBase(base, appVersion)
+                    if (result != null) return@withContext Result.success(result)
+                }
+                // 全部镜像都失败
+                val lastUrl = mirrors.lastOrNull() ?: "未知"
+                Result.failure(IOException("无法连接到方案市场（已尝试 ${mirrors.size} 个镜像）"))
             } catch (e: Exception) {
                 Log.e(TAG, "fetchSchemes failed", e)
                 Result.failure(e)
             }
         }
+
+    /** 尝试从一个镜像基址获取完整方案列表。获取到空方案不计为成功，返回 null 让外层试下一个镜像。 */
+    private fun tryFetchFromBase(base: String, appVersion: String): SchemesFetch? {
+        val repoPath = "index.yaml"
+        val host = hostOf(base)
+        try {
+            val rootText = fetchTextSingle(base, repoPath) ?: return null
+            val root = XimeIndexParser.parseIndex(rootText)
+            val subPath = XimeIndexParser.resolveRepoPath(
+                repoPath, root.schemas?.from ?: "./rimes/index.yaml",
+            )
+            val subText = fetchTextSingle(base, subPath) ?: return null
+            val sub = XimeIndexParser.parseSubIndex(subText)
+
+            // 方案文件从所有镜像获取（按顺序轮询），避免单个 CDN 频率限制
+            val schemeTexts = sub.schemas.mapNotNull { entry ->
+                val p = XimeIndexParser.resolveRepoPath(subPath, entry.file)
+                fetchTextAnyMirror(p)
+            }
+            Log.d(TAG, "tryFetchFromBase $host: 子索引共 ${sub.schemas.size} 条，获取到 ${schemeTexts.size} 个方案文件")
+            val schemes = schemeTexts.mapNotNull { text ->
+                runCatching { XimeIndexParser.parseScheme(text) }.getOrNull()
+            }.distinctBy { it.id }
+                .map { XimeIndexParser.toItem(it, appVersion) }
+            Log.d(TAG, "tryFetchFromBase $host: 解析后 ${schemes.size} 个方案: ${schemes.map { it.scheme.id }}")
+
+            if (schemes.isEmpty()) {
+                Log.w(TAG, "tryFetchFromBase $host: 获取到 0 个方案，尝试下一个镜像")
+                return null
+            }
+            Log.i(TAG, "tryFetchFromBase $host: 获取到 ${schemes.size} 个方案")
+            return SchemesFetch(schemes, host)
+        } catch (e: Exception) {
+            Log.w(TAG, "tryFetchFromBase $host failed: ${e.message}")
+            return null
+        }
+    }
+
+    /** 从单一镜像基址获取文件内容，失败返回 null（不抛异常）。 */
+    private fun fetchTextSingle(base: String, repoPath: String): String? {
+        return try {
+            client.newCall(Request.Builder().url(base + repoPath).build()).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    resp.body?.string()?.takeIf { it.isNotBlank() }
+                } else null
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "fetchTextSingle $base$repoPath failed: ${e.message}")
+            null
+        }
+    }
+
+    /** 在所有镜像中查找文件，返回第一个成功获取的内容。 */
+    private fun fetchTextAnyMirror(repoPath: String): String? {
+        for (base in mirrors) {
+            val result = fetchTextSingle(base, repoPath)
+            if (result != null) return result
+        }
+        return null
+    }
 
     /**
      * 安装一个方案：按版本 downloadUrl（+sha256）落盘，再按索引声明依赖补齐编译依赖。
@@ -154,12 +152,13 @@ object XimeIndexSource {
     ): InstallResult = withContext(Dispatchers.IO) {
         val v = scheme.resolvedVersion()
             ?: return@withContext InstallResult(false, failureReason = "无可用版本")
-        if (v.downloadUrl.isBlank()) {
+        val first = v.downloadUrls.firstOrNull()
+        if (first == null || first.url.isBlank()) {
             return@withContext InstallResult(false, failureReason = "缺少下载地址")
         }
 
         val before = SchemaManager.discoverSchemas(context).map { it.schemaId }.toSet()
-        val ok = SchemaManager.importFromUrl(context, v.downloadUrl, v.sha256)
+        val ok = SchemaManager.importFromUrl(context, first.url, first.sha256)
         if (!ok) return@withContext InstallResult(false, failureReason = "安装失败或文件校验失败")
 
         // 找到新落盘的真实 rime schema id（索引 id 不保证等于 rime schema_id / 文件名）
