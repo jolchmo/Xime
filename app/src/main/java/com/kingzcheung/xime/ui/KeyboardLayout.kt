@@ -91,6 +91,12 @@ internal fun isCangjieFamily(schemaId: String): Boolean {
         schemaId.contains("仓颉") || schemaId.contains("速成")
 }
 
+/** 当前方案是否五笔系（xime.yaml 的 swipe_down 字根是五笔字根，仅五笔方案才应显示）。 */
+internal fun isWubiFamily(schemaId: String): Boolean {
+    val s = schemaId.lowercase()
+    return s.contains("wubi") || schemaId.contains("五笔")
+}
+
 /** 数字行：1-0，开启「数字行」时渲染在 QWERTY 上方。中英文共用，透传阴影。 */
 @Composable
 internal fun NumberRow(
@@ -315,6 +321,7 @@ fun KeyboardLayout(
 
     // 仓颉/速成：字根（同时用 id 与显示名判断，市场方案 id 可能不规范）
     val isCangjieSchema = isCangjieFamily(currentSchemaId) || isCangjieFamily(schemaName)
+    val isWubiSchema = isWubiFamily(currentSchemaId) || isWubiFamily(schemaName)
     val cangjieRadicalFor: (String) -> String? = { k -> if (isCangjieSchema) CANGJIE_RADICALS[k.lowercase()] else null }
     val mainLabelFor: (String) -> String? = { k -> if (radicalAsLabel && isCangjieSchema) CANGJIE_RADICALS[k.lowercase()] else null }
 
@@ -410,6 +417,7 @@ fun KeyboardLayout(
                                 shadowShapeRadius = shadowShapeRadius,
                                 radicalFor = cangjieRadicalFor,
                                 mainLabelOverride = mainLabelFor,
+                                isWubiSchema = isWubiSchema,
                             )
                         }
                     }
@@ -454,6 +462,7 @@ fun KeyboardLayout(
                                 shadowShapeRadius = shadowShapeRadius,
                                 radicalFor = cangjieRadicalFor,
                                 mainLabelOverride = mainLabelFor,
+                                isWubiSchema = isWubiSchema,
                             )
                         }
                     }
@@ -515,8 +524,8 @@ fun KeyboardLayout(
                                         GestureAction.PASTE, GestureAction.LINE_START, GestureAction.LINE_END, GestureAction.UNDO
                                     )
                                     val swipeDownBubbleText =
-                                        if (radicalOverride == null && swipeDownDisplay != "key" && swipeDownHintsEnabled && swipeDownRadicalEnabled) swipeDownLabel else null
-                                    // 下：字根模式只显字根(仓颉静态/五笔气泡)；功能模式只显编辑功能(复制/粘贴/全选…)
+                                        if (radicalOverride == null && !isFunctionAction && swipeDownDisplay != "key" && swipeDownHintsEnabled && swipeDownRadicalEnabled && isWubiSchema) swipeDownLabel else null
+                                    // 下：字根模式只显字根(仓颉静态/五笔气泡，五笔仅在五笔方案显示)；功能模式只显编辑功能
                                     val swipeDownStaticLabel = when {
                                         mainLabelFor(key) != null -> null
                                         !swipeDownHintsEnabled -> null
@@ -971,6 +980,7 @@ fun KeyboardRowWithConfig(
     shadowShapeRadius: Dp = 8.dp,
     radicalFor: ((String) -> String?)? = null,
     mainLabelOverride: ((String) -> String?)? = null,
+    isWubiSchema: Boolean = false,
 ) {
     Row(
         modifier = modifier
@@ -992,7 +1002,7 @@ fun KeyboardRowWithConfig(
                 GestureAction.PASTE, GestureAction.LINE_START, GestureAction.LINE_END, GestureAction.UNDO
             )
             val swipeDownBubbleText =
-                if (radicalOverride == null && swipeDownDisplay != "key" && swipeDownHintsEnabled && swipeDownRadicalEnabled) swipeDownLabel else null
+                if (radicalOverride == null && !isFunctionAction && swipeDownDisplay != "key" && swipeDownHintsEnabled && swipeDownRadicalEnabled && isWubiSchema) swipeDownLabel else null
             // 下：字根模式只显字根(仓颉静态/五笔气泡)；功能模式只显编辑功能(复制/粘贴/全选…)
             val swipeDownStaticLabel = when {
                 mainLabelOverride?.invoke(key) != null -> null
