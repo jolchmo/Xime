@@ -97,6 +97,19 @@ internal fun isWubiFamily(schemaId: String): Boolean {
     return s.contains("wubi") || schemaId.contains("五笔")
 }
 
+/**
+ * 「功能」模式（下滑提示=功能）下，字母键下滑触发的编辑功能。
+ * 仅在功能模式生效；字根模式下这些键照常显示/触发字根，互不干扰。
+ * 记忆习惯对齐 Ctrl+A/C/V/X。
+ */
+internal fun functionModeGestureFor(key: String): Pair<String, GestureAction>? = when (key.lowercase()) {
+    "a" -> "全选" to GestureAction.SELECT_ALL
+    "c" -> "复制" to GestureAction.COPY
+    "v" -> "粘贴" to GestureAction.PASTE
+    "x" -> "剪切" to GestureAction.CUT
+    else -> null
+}
+
 /** 数字行：1-0，开启「数字行」时渲染在 QWERTY 上方。中英文共用，透传阴影。 */
 @Composable
 internal fun NumberRow(
@@ -259,6 +272,7 @@ fun KeyboardLayout(
     var numberRowEnabled by remember { mutableStateOf(SettingsPreferences.isNumberRowEnabled(context)) }
     var radicalAsLabel by remember { mutableStateOf(SettingsPreferences.isRadicalAsLabel(context)) }
     var bottomLeftCount by remember { mutableStateOf(SettingsPreferences.getBottomLeftCount(context)) }
+    var rowSpacingDp by remember { mutableStateOf(SettingsPreferences.getRowSpacingDp(context)) }
 
     // 监听设置变化
     DisposableEffect(context) {
@@ -286,6 +300,8 @@ fun KeyboardLayout(
                         numberRowEnabled = SettingsPreferences.isNumberRowEnabled(context)
                     SettingsPreferences.KEY_RADICAL_AS_LABEL ->
                         radicalAsLabel = SettingsPreferences.isRadicalAsLabel(context)
+                    SettingsPreferences.KEY_ROW_SPACING_DP ->
+                        rowSpacingDp = SettingsPreferences.getRowSpacingDp(context)
                 }
             }
         prefs.registerOnSharedPreferenceChangeListener(listener)
@@ -366,7 +382,7 @@ fun KeyboardLayout(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                    verticalArrangement = Arrangement.spacedBy(rowSpacingDp.dp)
                 ) {
                     // 数字行（可选）
                     if (numberRowEnabled && !isVoiceMode) {
@@ -525,13 +541,14 @@ fun KeyboardLayout(
                                     )
                                     val swipeDownBubbleText =
                                         if (radicalOverride == null && !isFunctionAction && swipeDownDisplay != "key" && swipeDownHintsEnabled && swipeDownRadicalEnabled && isWubiSchema) swipeDownLabel else null
-                                    // 下：字根模式只显字根(仓颉静态/五笔气泡，五笔仅在五笔方案显示)；功能模式只显编辑功能
+                                    // 功能模式(下滑提示=功能)：a/c/v/x 下滑=全选/复制/粘贴/剪切；与字根模式互斥
+                                    val funcGesture = if (swipeDownHintsEnabled && !swipeDownRadicalEnabled) functionModeGestureFor(key) else null
+                                    // 下：字根模式只显字根(仓颉静态/五笔气泡)；功能模式显编辑功能名
                                     val swipeDownStaticLabel = when {
                                         mainLabelFor(key) != null -> null
                                         !swipeDownHintsEnabled -> null
                                         swipeDownRadicalEnabled -> radicalOverride
-                                        isFunctionAction -> swipeDownLabel
-                                        else -> null
+                                        else -> funcGesture?.first ?: (if (isFunctionAction) swipeDownLabel else null)
                                     }
 
                                     val longPressConfig =
@@ -558,18 +575,23 @@ fun KeyboardLayout(
                                         swipeDownText = swipeDownBubbleText,
                                         swipeDownKeyLabel = swipeDownStaticLabel,
                                         onSwipe = if (swipeUpText != null) onKeyPress else null,
-                                        onSwipeDown = if (swipeDownAction != null && swipeDownHintsEnabled && swipeDownLabel != null) {
-                                            val label = swipeDownLabel
-                                            { _ ->
-                                                if (swipeDownAction == GestureAction.COMMIT) {
-                                                    onKeyPress(key)
-                                                } else {
-                                                    onGestureAction?.invoke(
-                                                        swipeDownAction,
-                                                        swipeDownValue?.ifEmpty { label } ?: label)
+                                        onSwipeDown = when {
+                                            funcGesture != null -> { _ -> onGestureAction?.invoke(funcGesture.second, "") }
+                                            swipeDownRadicalEnabled && swipeDownAction != null && swipeDownHintsEnabled && swipeDownLabel != null -> run {
+                                                val label = swipeDownLabel
+                                                val act = swipeDownAction
+                                                { _: String ->
+                                                    if (act == GestureAction.COMMIT) {
+                                                        onKeyPress(key)
+                                                    } else {
+                                                        onGestureAction?.invoke(
+                                                            act,
+                                                            swipeDownValue?.ifEmpty { label } ?: label)
+                                                    }
                                                 }
                                             }
-                                        } else null,
+                                            else -> null
+                                        },
                                         onSwipeStateChange = { state, bounds ->
                                             processSwipeState(
                                                 state,
@@ -1003,13 +1025,14 @@ fun KeyboardRowWithConfig(
             )
             val swipeDownBubbleText =
                 if (radicalOverride == null && !isFunctionAction && swipeDownDisplay != "key" && swipeDownHintsEnabled && swipeDownRadicalEnabled && isWubiSchema) swipeDownLabel else null
-            // 下：字根模式只显字根(仓颉静态/五笔气泡)；功能模式只显编辑功能(复制/粘贴/全选…)
+            // 功能模式(下滑提示=功能)：a/c/v/x 下滑=全选/复制/粘贴/剪切；与字根模式互斥
+            val funcGesture = if (swipeDownHintsEnabled && !swipeDownRadicalEnabled) functionModeGestureFor(key) else null
+            // 下：字根模式只显字根(仓颉静态/五笔气泡)；功能模式显编辑功能名
             val swipeDownStaticLabel = when {
                 mainLabelOverride?.invoke(key) != null -> null
                 !swipeDownHintsEnabled -> null
                 swipeDownRadicalEnabled -> radicalOverride
-                isFunctionAction -> swipeDownLabel
-                else -> null
+                else -> funcGesture?.first ?: (if (isFunctionAction) swipeDownLabel else null)
             }
 
             // 长按选项
@@ -1037,18 +1060,23 @@ fun KeyboardRowWithConfig(
                 swipeDownText = swipeDownBubbleText,
                 swipeDownKeyLabel = swipeDownStaticLabel,
                 onSwipe = if (swipeUpText != null) onKeyPress else null,
-                onSwipeDown = if (swipeDownAction != null && swipeDownHintsEnabled && swipeDownLabel != null) {
-                    val label = swipeDownLabel
-                    { _ ->
-                        if (swipeDownAction == GestureAction.COMMIT) {
-                            onKeyPress(key)
-                        } else {
-                            onGestureAction?.invoke(
-                                swipeDownAction,
-                                swipeDownValue?.ifEmpty { label } ?: label)
+                onSwipeDown = when {
+                    funcGesture != null -> { _ -> onGestureAction?.invoke(funcGesture.second, "") }
+                    swipeDownRadicalEnabled && swipeDownAction != null && swipeDownHintsEnabled && swipeDownLabel != null -> run {
+                        val label = swipeDownLabel
+                        val act = swipeDownAction
+                        { _: String ->
+                            if (act == GestureAction.COMMIT) {
+                                onKeyPress(key)
+                            } else {
+                                onGestureAction?.invoke(
+                                    act,
+                                    swipeDownValue?.ifEmpty { label } ?: label)
+                            }
                         }
                     }
-                } else null,
+                    else -> null
+                },
                 onSwipeStateChange = onSwipeStateChange,
                 onPress = { onKeyPressDown?.invoke(key) },
                 onLongPressSelect = { selectedLabel ->

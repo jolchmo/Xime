@@ -331,6 +331,11 @@ object SettingsPreferences {
     }
     fun setFunctionKeys(context: Context, keys: List<String>) { getPrefs(context).edit().putString(KEY_FUNCTION_KEYS, keys.joinToString(",")).apply() }
 
+    // 行与行之间的间距(dp)，默认 6（与原硬编码一致）
+    const val KEY_ROW_SPACING_DP = "key_row_spacing_dp"
+    fun getRowSpacingDp(context: Context): Int = getPrefs(context).getInt(KEY_ROW_SPACING_DP, 6).coerceIn(0, 24)
+    fun setRowSpacingDp(context: Context, v: Int) { getPrefs(context).edit().putInt(KEY_ROW_SPACING_DP, v.coerceIn(0, 24)).apply() }
+
     // 布局编辑器：预览区是否折叠（折叠后只用测试框看真实键盘）
     const val KEY_EDITOR_PREVIEW_COLLAPSED = "editor_preview_collapsed"
     fun isEditorPreviewCollapsed(context: Context): Boolean = getPrefs(context).getBoolean(KEY_EDITOR_PREVIEW_COLLAPSED, false)

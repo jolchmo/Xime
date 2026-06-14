@@ -62,6 +62,7 @@ import com.kingzcheung.xime.settings.KeysConfigHelper
 import com.kingzcheung.xime.settings.SettingsPreferences
 import com.kingzcheung.xime.ui.CANGJIE_RADICALS
 import com.kingzcheung.xime.ui.FunctionKey
+import com.kingzcheung.xime.ui.functionModeGestureFor
 import com.kingzcheung.xime.ui.KeyboardLayout
 import com.kingzcheung.xime.ui.LocalKeyInsetH
 import com.kingzcheung.xime.ui.LocalKeyInsetV
@@ -124,6 +125,7 @@ fun LayoutEditorContent(onBack: () -> Unit) {
     var heightDp by remember { mutableStateOf(SettingsPreferences.getKeyboardHeightDp(context, isLandscape)) }
     var bottomPaddingDp by remember { mutableStateOf(SettingsPreferences.getKeyboardBottomPaddingDp(context)) }
     var sidePaddingDp by remember { mutableStateOf(SettingsPreferences.getKeyboardSidePaddingDp(context)) }
+    var rowSpacingDp by remember { mutableStateOf(SettingsPreferences.getRowSpacingDp(context)) }
     var keyInsetH by remember { mutableStateOf(SettingsPreferences.getKeyHInsetDp(context)) }
     var keyInsetV by remember { mutableStateOf(SettingsPreferences.getKeyVInsetDp(context)) }
     var cornerRadius by remember { mutableStateOf(SettingsPreferences.getKeyCornerRadiusDp(context, shadowDefault.shapeRadius)) }
@@ -256,6 +258,14 @@ fun LayoutEditorContent(onBack: () -> Unit) {
                         onValueChangeFinished = { SettingsPreferences.setKeyboardBottomPaddingDp(context, bottomPaddingDp) }
                     )
                     SliderRow(
+                        title = "行间距", subtitle = "每行按键之间的纵向间隙",
+                        valueLabel = "${rowSpacingDp}dp",
+                        value = rowSpacingDp.toFloat().coerceIn(0f, 24f),
+                        valueRange = 0f..24f,
+                        onValueChange = { rowSpacingDp = it.toInt() },
+                        onValueChangeFinished = { SettingsPreferences.setRowSpacingDp(context, rowSpacingDp) }
+                    )
+                    SliderRow(
                         title = "按键宽度（左右边距）", subtitle = "边距越大，按键越窄",
                         valueLabel = "${sidePaddingDp}dp",
                         value = sidePaddingDp.toFloat(), valueRange = 0f..48f,
@@ -368,7 +378,7 @@ fun LayoutEditorContent(onBack: () -> Unit) {
                             middle = if (midMode == 1) (CANGJIE_RADICALS[SAMPLE_KEY] ?: "A") else "A",
                             bottom = when {
                                 midMode == 1 -> null
-                                bottomMode == 1 -> "粘贴"
+                                bottomMode == 1 -> functionModeGestureFor(SAMPLE_KEY)?.first
                                 bottomMode == 2 -> CANGJIE_RADICALS[SAMPLE_KEY]
                                 else -> null
                             }
@@ -395,7 +405,7 @@ fun LayoutEditorContent(onBack: () -> Unit) {
                         }
                     }
                     Text(
-                        "「功能」键面显示该键下滑标签(若配置了复制/粘贴/全选等手势则显示功能)；「字根」仓颉/速成键面显字根(如 A→日)、五笔以下滑气泡显字根。注：当前方案字母键下滑默认是五笔字根(action:none)，并未绑定剪贴功能。",
+                        "「功能」：a/c/v/x 下滑=全选/复制/粘贴/剪切并显示标签（下滑即触发）。「字根」：仓颉/速成键面显字根(如 A→日)、五笔以下滑气泡显字根。两者共用下滑手势、互斥——选谁就是谁。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp)
