@@ -1509,6 +1509,17 @@ onVoiceModeChange = { enabled ->
                                 commitText(key)
                             }
                         }
+                    } else if (isShifted && !state.isAsciiMode && key.length == 1 && key[0] in 'a'..'z') {
+                        // 中文模式下 Shift = 直接上屏大写英文（绕过 RIME）：先上屏在编内容，再上大写字母
+                        if (state.isComposing) {
+                            val committedText = rimeEngine.commit()
+                            if (committedText.isNotEmpty()) {
+                                withContext(Dispatchers.Main) { commitText(committedText) }
+                            }
+                            rimeEngine.clearComposition()
+                        }
+                        withContext(Dispatchers.Main) { commitText(key.uppercase()) }
+                        needsUIUpdate = true
                     } else {
                         val char = if (isShifted) key.uppercase() else key
                         val keyCode = key.lowercase()[0].code

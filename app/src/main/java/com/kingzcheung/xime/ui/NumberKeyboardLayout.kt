@@ -222,6 +222,10 @@ private fun NumberRows(
     onSwipeStateChange: ((SwipeState, Rect) -> Unit)? = null
 ) {
     val symbols = listOf("+", "-", "*")
+    // Shift：数字 1-0 → !@#$%^&*()
+    var numShifted by remember { mutableStateOf(false) }
+    val shiftMap = mapOf("1" to "!", "2" to "@", "3" to "#", "4" to "$", "5" to "%", "6" to "^", "7" to "&", "8" to "*", "9" to "(", "0" to ")")
+    fun disp(d: String) = if (numShifted) (shiftMap[d] ?: d) else d
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -248,12 +252,12 @@ private fun NumberRows(
             )
             listOf("1", "2", "3").forEach { key ->
                 KeyButton(
-                    text = key,
-                    onClick = { onKeyPress(key) },
+                    text = disp(key),
+                    onClick = { onKeyPress(disp(key)) },
                     backgroundColor = keyBackgroundColor,
                     textColor = keyTextColor,
                     modifier = Modifier.weight(1f),
-                    onPress = { onKeyPressDown?.invoke(key) },
+                    onPress = { onKeyPressDown?.invoke(disp(key)) },
                     shadowEnabled = shadowEnabled,
                     shadowElevation = shadowElevation,
                     shadowShapeRadius = shadowShapeRadius,
@@ -300,12 +304,12 @@ private fun NumberRows(
             )
             listOf("4", "5", "6").forEach { key ->
                 KeyButton(
-                    text = key,
-                    onClick = { onKeyPress(key) },
+                    text = disp(key),
+                    onClick = { onKeyPress(disp(key)) },
                     backgroundColor = keyBackgroundColor,
                     textColor = keyTextColor,
                     modifier = Modifier.weight(1f),
-                    onPress = { onKeyPressDown?.invoke(key) },
+                    onPress = { onKeyPressDown?.invoke(disp(key)) },
                     shadowEnabled = shadowEnabled,
                     shadowElevation = shadowElevation,
                     shadowShapeRadius = shadowShapeRadius,
@@ -344,12 +348,12 @@ private fun NumberRows(
             )
             listOf("7", "8", "9").forEach { key ->
                 KeyButton(
-                    text = key,
-                    onClick = { onKeyPress(key) },
+                    text = disp(key),
+                    onClick = { onKeyPress(disp(key)) },
                     backgroundColor = keyBackgroundColor,
                     textColor = keyTextColor,
                     modifier = Modifier.weight(1f),
-                    onPress = { onKeyPressDown?.invoke(key) },
+                    onPress = { onKeyPressDown?.invoke(disp(key)) },
                     shadowEnabled = shadowEnabled,
                     shadowElevation = shadowElevation,
                     shadowShapeRadius = shadowShapeRadius,
@@ -387,23 +391,23 @@ private fun NumberRows(
                 shadowShapeRadius = shadowShapeRadius,
             )
             KeyButton(
-                text = "/",
-                onClick = { onKeyPress("/") },
-                backgroundColor = keyBackgroundColor,
+                text = if (numShifted) "123" else "!#",
+                onClick = { numShifted = !numShifted },
+                backgroundColor = specialKeyBackgroundColor,
                 textColor = keyTextColor,
+                isHighlighted = numShifted,
                 modifier = Modifier.weight(1f),
-                onPress = { onKeyPressDown?.invoke("/") },
                 shadowEnabled = shadowEnabled,
                 shadowElevation = shadowElevation,
                 shadowShapeRadius = shadowShapeRadius,
             )
             KeyButton(
-                text = "0",
-                onClick = { onKeyPress("0") },
+                text = disp("0"),
+                onClick = { onKeyPress(disp("0")) },
                 backgroundColor = keyBackgroundColor,
                 textColor = keyTextColor,
                 modifier = Modifier.weight(1.5f),
-                onPress = { onKeyPressDown?.invoke("0") },
+                onPress = { onKeyPressDown?.invoke(disp("0")) },
                 shadowEnabled = shadowEnabled,
                 shadowElevation = shadowElevation,
                 shadowShapeRadius = shadowShapeRadius,
