@@ -518,7 +518,8 @@ fun KeyboardLayout(
                                         !swipeDownHintsEnabled -> null
                                         radicalOverride != null && swipeDownRadicalEnabled -> radicalOverride
                                         swipeDownDisplay == "key" -> swipeDownLabel
-                                        else -> null
+                                        // 功能模式(swipeDownRadicalEnabled=false)：键面静态显示该键下滑标签
+                                        else -> if (swipeDownRadicalEnabled) null else swipeDownLabel
                                     }
 
                                     val longPressConfig =
@@ -991,7 +992,7 @@ fun KeyboardRowWithConfig(
                 !swipeDownHintsEnabled -> null
                 radicalOverride != null && swipeDownRadicalEnabled -> radicalOverride
                 swipeDownDisplay == "key" -> swipeDownLabel
-                else -> null
+                else -> if (swipeDownRadicalEnabled) null else swipeDownLabel
             }
 
             // 长按选项

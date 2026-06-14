@@ -368,6 +368,7 @@ fun LayoutEditorContent(onBack: () -> Unit) {
                             middle = if (midMode == 1) (CANGJIE_RADICALS[SAMPLE_KEY] ?: "A") else "A",
                             bottom = when {
                                 midMode == 1 -> null
+                                bottomMode == 1 -> "粘贴"
                                 bottomMode == 2 -> CANGJIE_RADICALS[SAMPLE_KEY]
                                 else -> null
                             }
@@ -387,14 +388,14 @@ fun LayoutEditorContent(onBack: () -> Unit) {
                             )
                             SegmentedRow(
                                 label = "下 · 下滑提示",
-                                options = listOf("隐藏", "字根"),
-                                selectedIndex = if (bottomMode == 0) 0 else 1,
-                                onSelect = { val m = if (it == 1) 2 else 0; bottomMode = m; SettingsPreferences.setSwipeDownMode(context, m) }
+                                options = listOf("隐藏", "功能", "字根"),
+                                selectedIndex = bottomMode,
+                                onSelect = { bottomMode = it; SettingsPreferences.setSwipeDownMode(context, it) }
                             )
                         }
                     }
                     Text(
-                        "「字根」：仓颉/速成在键面静态显示字根（如 A→日）；五笔等以下滑气泡显示字根。中选「字根」时下方不再重复。",
+                        "「功能」键面显示该键下滑标签(若配置了复制/粘贴/全选等手势则显示功能)；「字根」仓颉/速成键面显字根(如 A→日)、五笔以下滑气泡显字根。注：当前方案字母键下滑默认是五笔字根(action:none)，并未绑定剪贴功能。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp)
