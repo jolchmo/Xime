@@ -26,6 +26,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.compositionLocalOf
 import com.kingzcheung.xime.ui.LocalStretchFactor
 import com.kingzcheung.xime.util.CharInfo
 import androidx.compose.ui.Modifier
@@ -49,6 +50,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
+
+/** 按键背景四周留白（dp）。用于「按键背景长宽」调整，默认 0（不留白）。由 KeyboardView 在根部按用户偏好提供。 */
+val LocalKeyInsetH = compositionLocalOf { 0 }
+val LocalKeyInsetV = compositionLocalOf { 0 }
+
+/** 键盘左右边距覆盖（dp）。仅布局编辑器预览用：非空时覆盖 KeyboardLayout 自读的偏好，实现拖动即时预览。 */
+val LocalKeyboardSidePadding = compositionLocalOf<Int?> { null }
 
 data class SwipeState(
     val isSwiping: Boolean = false,
@@ -105,8 +113,11 @@ fun KeyButton(
     val bubbleShowThresholdDown = swipeDownThreshold * 0.3f
 
     val shadowShape = remember(shadowShapeRadius) { RoundedCornerShape(shadowShapeRadius) }
-    val shadowModifier = remember(shadowEnabled, shadowElevation, shadowShapeRadius) {
-        if (shadowEnabled) Modifier.shadow(shadowElevation, shadowShape) else Modifier
+    val keyInsetH = LocalKeyInsetH.current
+    val keyInsetV = LocalKeyInsetV.current
+    val shadowModifier = remember(shadowEnabled, shadowElevation, shadowShapeRadius, keyInsetH, keyInsetV) {
+        val base = if (shadowEnabled) Modifier.shadow(shadowElevation, shadowShape) else Modifier
+        Modifier.padding(horizontal = keyInsetH.dp, vertical = keyInsetV.dp).then(base)
     }
     
     // 辅助函数：生成更深的颜色（混合黑色）
@@ -282,6 +293,7 @@ fun SwipeableKeyButton(
     onSwipeDown: ((String) -> Unit)? = null,
     onSwipeStateChange: ((SwipeState, Rect) -> Unit)? = null,
     onPress: (() -> Unit)? = null,
+    onLongClick: (() -> Unit)? = null,
     onLongPressSelect: ((String) -> Unit)? = null,
     longPressItems: List<String>? = null,
     fontSize: androidx.compose.ui.unit.TextUnit = androidx.compose.ui.unit.TextUnit.Unspecified,
@@ -307,6 +319,7 @@ fun SwipeableKeyButton(
     val currentOnSwipeStateChange by rememberUpdatedState(onSwipeStateChange)
     val currentOnPress by rememberUpdatedState(onPress)
     val currentOnClick by rememberUpdatedState(onClick)
+    val currentOnLongClick by rememberUpdatedState(onLongClick)
     val currentOnLongPressSelect by rememberUpdatedState(onLongPressSelect)
     val currentLongPressItems by rememberUpdatedState(longPressItems)
     val scope = rememberCoroutineScope()
@@ -319,8 +332,11 @@ fun SwipeableKeyButton(
     val bubbleShowThresholdDown = swipeDownThreshold * 0.3f
 
     val shadowShape = remember(shadowShapeRadius) { RoundedCornerShape(shadowShapeRadius) }
-    val shadowModifier = remember(shadowEnabled, shadowElevation, shadowShapeRadius) {
-        if (shadowEnabled) Modifier.shadow(shadowElevation, shadowShape) else Modifier
+    val keyInsetH = LocalKeyInsetH.current
+    val keyInsetV = LocalKeyInsetV.current
+    val shadowModifier = remember(shadowEnabled, shadowElevation, shadowShapeRadius, keyInsetH, keyInsetV) {
+        val base = if (shadowEnabled) Modifier.shadow(shadowElevation, shadowShape) else Modifier
+        Modifier.padding(horizontal = keyInsetH.dp, vertical = keyInsetV.dp).then(base)
     }
     
     Box(
@@ -426,6 +442,9 @@ fun SwipeableKeyButton(
                         },
                         onTap = {
                             if (!hasTriggeredSwipeUp && !hasTriggeredSwipeDown) currentOnClick?.invoke()
+                        },
+                        onLongPress = {
+                            if (!hasTriggeredSwipeUp && !hasTriggeredSwipeDown) currentOnLongClick?.invoke()
                         }
                     )
                     return@pointerInput
@@ -620,8 +639,11 @@ fun IconKeyButton(
     var isPressed by remember { mutableStateOf(false) }
 
     val shadowShape = remember(shadowShapeRadius) { RoundedCornerShape(shadowShapeRadius) }
-    val shadowModifier = remember(shadowEnabled, shadowElevation, shadowShapeRadius) {
-        if (shadowEnabled) Modifier.shadow(shadowElevation, shadowShape) else Modifier
+    val keyInsetH = LocalKeyInsetH.current
+    val keyInsetV = LocalKeyInsetV.current
+    val shadowModifier = remember(shadowEnabled, shadowElevation, shadowShapeRadius, keyInsetH, keyInsetV) {
+        val base = if (shadowEnabled) Modifier.shadow(shadowElevation, shadowShape) else Modifier
+        Modifier.padding(horizontal = keyInsetH.dp, vertical = keyInsetV.dp).then(base)
     }
     
     // 辅助函数：生成更深的颜色（混合黑色）
@@ -742,8 +764,11 @@ fun SwipeableIconKeyButton(
     }
 
     val shadowShape = remember(shadowShapeRadius) { RoundedCornerShape(shadowShapeRadius) }
-    val shadowModifier = remember(shadowEnabled, shadowElevation, shadowShapeRadius) {
-        if (shadowEnabled) Modifier.shadow(shadowElevation, shadowShape) else Modifier
+    val keyInsetH = LocalKeyInsetH.current
+    val keyInsetV = LocalKeyInsetV.current
+    val shadowModifier = remember(shadowEnabled, shadowElevation, shadowShapeRadius, keyInsetH, keyInsetV) {
+        val base = if (shadowEnabled) Modifier.shadow(shadowElevation, shadowShape) else Modifier
+        Modifier.padding(horizontal = keyInsetH.dp, vertical = keyInsetV.dp).then(base)
     }
     
     fun darkenColor(color: Color, factor: Float = 0.15f): Color {

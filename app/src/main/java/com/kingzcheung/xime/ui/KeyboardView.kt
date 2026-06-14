@@ -28,6 +28,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.compositionLocalOf
@@ -140,6 +141,29 @@ fun KeyboardView(
 
     val kbColors = KeysConfigHelper.getKeyboardColors()
     val kbShadow = KeysConfigHelper.getKeyboardShadow()
+    // 用户偏好覆盖维护者 asset 阴影/圆角；按键背景留白(长宽)经 CompositionLocal 下发。
+    // 用 state + SharedPreferences 监听，使布局编辑器里的改动实时反映到正在显示的键盘上。
+    val keyboardCtx = androidx.compose.ui.platform.LocalContext.current
+    val sp = com.kingzcheung.xime.settings.SettingsPreferences
+    var effShadowEnabled by remember { mutableStateOf(sp.isKeyShadowEnabled(keyboardCtx, kbShadow.enabled)) }
+    var effShadowElevation by remember { mutableStateOf(sp.getKeyShadowElevationDp(keyboardCtx, kbShadow.elevation)) }
+    var effCornerRadius by remember { mutableStateOf(sp.getKeyCornerRadiusDp(keyboardCtx, kbShadow.shapeRadius)) }
+    var keyInsetH by remember { mutableStateOf(sp.getKeyHInsetDp(keyboardCtx)) }
+    var keyInsetV by remember { mutableStateOf(sp.getKeyVInsetDp(keyboardCtx)) }
+    DisposableEffect(keyboardCtx) {
+        val prefs = sp.getPrefsPublic(keyboardCtx)
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            when (key) {
+                sp.KEY_SHADOW_ENABLED -> effShadowEnabled = sp.isKeyShadowEnabled(keyboardCtx, kbShadow.enabled)
+                sp.KEY_SHADOW_ELEVATION_DP -> effShadowElevation = sp.getKeyShadowElevationDp(keyboardCtx, kbShadow.elevation)
+                sp.KEY_CORNER_RADIUS_DP -> effCornerRadius = sp.getKeyCornerRadiusDp(keyboardCtx, kbShadow.shapeRadius)
+                sp.KEY_H_INSET_DP -> keyInsetH = sp.getKeyHInsetDp(keyboardCtx)
+                sp.KEY_V_INSET_DP -> keyInsetV = sp.getKeyVInsetDp(keyboardCtx)
+            }
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
     val longToColor: (Long) -> Color = { Color(0xFF000000 or it) }
     val keyboardBgColor = if (isDarkTheme) longToColor(kbColors.keyboardBgColorDark)
         else longToColor(kbColors.keyboardBgColor)
@@ -169,6 +193,10 @@ fun KeyboardView(
         keyboardState = initialKeyboardLayoutState(isAsciiMode)
     }
 
+    androidx.compose.runtime.CompositionLocalProvider(
+        LocalKeyInsetH provides keyInsetH,
+        LocalKeyInsetV provides keyInsetV
+    ) {
     Box(modifier = modifier.background(keyboardBgColor)) {
         Column(
             modifier = Modifier
@@ -312,6 +340,18 @@ fun KeyboardView(
                             )
                             "mode_change_symbol" -> currentRoute = KeyboardRoute.Symbol
                             "emoji" -> currentRoute = KeyboardRoute.Emoji
+                            "voice" -> when {
+                                !isSttEnabled -> android.widget.Toast.makeText(
+                                    keyboardCtx, "请先在「设置 → 语音输入」中开启语音", android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                                !com.kingzcheung.xime.util.PermissionHelper.hasRecordAudioPermission(keyboardCtx) -> {
+                                    android.widget.Toast.makeText(
+                                        keyboardCtx, "需要麦克风权限才能使用语音输入", android.widget.Toast.LENGTH_SHORT
+                                    ).show()
+                                    com.kingzcheung.xime.util.PermissionHelper.requestRecordAudioPermission(keyboardCtx)
+                                }
+                                else -> onVoiceModeChange?.invoke(true)
+                            }
                             else -> onKeyPress(key, isShifted)
                         }
                     }
@@ -355,9 +395,9 @@ fun KeyboardView(
                         keyTextColor = keyTextColor,
                         specialKeyBackgroundColor = specialKeyBgColor,
                         keyboardBackgroundColor = keyboardBgColor,
-                        shadowEnabled = kbShadow.enabled,
-                        shadowElevation = kbShadow.elevation.dp,
-                        shadowShapeRadius = kbShadow.shapeRadius.dp,
+                        shadowEnabled = effShadowEnabled,
+                        shadowElevation = effShadowElevation.dp,
+                        shadowShapeRadius = effCornerRadius.dp,
                         modifier = Modifier.weight(1f).then(cursorMod),
                         onKeyPressDown = onKeyPressDown,
                         onVoiceModeChange = onVoiceModeChange,
@@ -608,5 +648,6 @@ fun KeyboardView(
             }
         }
         }
+    }
     }
 }
