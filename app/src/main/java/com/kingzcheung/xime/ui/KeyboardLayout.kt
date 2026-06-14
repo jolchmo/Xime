@@ -510,16 +510,19 @@ fun KeyboardLayout(
                                     val swipeDownValue = swipeDownRaw?.value
                                     val swipeDownDisplay = swipeDownRaw?.display ?: "key"
                                     val radicalOverride = cangjieRadicalFor(key)
+                                    val isFunctionAction = swipeDownAction in setOf(
+                                        GestureAction.SELECT_ALL, GestureAction.COPY, GestureAction.CUT,
+                                        GestureAction.PASTE, GestureAction.LINE_START, GestureAction.LINE_END, GestureAction.UNDO
+                                    )
                                     val swipeDownBubbleText =
-                                        if (radicalOverride == null && swipeDownDisplay != "key") swipeDownLabel else null
-                                    // 仓颉/速成字根静态显示在键面；字根代替模式则字根作主标签、不再小字
+                                        if (radicalOverride == null && swipeDownDisplay != "key" && swipeDownHintsEnabled && swipeDownRadicalEnabled) swipeDownLabel else null
+                                    // 下：字根模式只显字根(仓颉静态/五笔气泡)；功能模式只显编辑功能(复制/粘贴/全选…)
                                     val swipeDownStaticLabel = when {
                                         mainLabelFor(key) != null -> null
                                         !swipeDownHintsEnabled -> null
-                                        radicalOverride != null && swipeDownRadicalEnabled -> radicalOverride
-                                        swipeDownDisplay == "key" -> swipeDownLabel
-                                        // 功能模式(swipeDownRadicalEnabled=false)：键面静态显示该键下滑标签
-                                        else -> if (swipeDownRadicalEnabled) null else swipeDownLabel
+                                        swipeDownRadicalEnabled -> radicalOverride
+                                        isFunctionAction -> swipeDownLabel
+                                        else -> null
                                     }
 
                                     val longPressConfig =
@@ -984,15 +987,19 @@ fun KeyboardRowWithConfig(
             val swipeDownValue = swipeDownRaw?.value
             val swipeDownDisplay = swipeDownRaw?.display ?: "key"
             val radicalOverride = radicalFor?.invoke(key)
+            val isFunctionAction = swipeDownAction in setOf(
+                GestureAction.SELECT_ALL, GestureAction.COPY, GestureAction.CUT,
+                GestureAction.PASTE, GestureAction.LINE_START, GestureAction.LINE_END, GestureAction.UNDO
+            )
             val swipeDownBubbleText =
-                if (radicalOverride == null && swipeDownDisplay != "key" && swipeDownHintsEnabled) swipeDownLabel else null
-            // 仓颉/速成字根静态显示在键面；字根代替模式则字根作主标签
+                if (radicalOverride == null && swipeDownDisplay != "key" && swipeDownHintsEnabled && swipeDownRadicalEnabled) swipeDownLabel else null
+            // 下：字根模式只显字根(仓颉静态/五笔气泡)；功能模式只显编辑功能(复制/粘贴/全选…)
             val swipeDownStaticLabel = when {
                 mainLabelOverride?.invoke(key) != null -> null
                 !swipeDownHintsEnabled -> null
-                radicalOverride != null && swipeDownRadicalEnabled -> radicalOverride
-                swipeDownDisplay == "key" -> swipeDownLabel
-                else -> if (swipeDownRadicalEnabled) null else swipeDownLabel
+                swipeDownRadicalEnabled -> radicalOverride
+                isFunctionAction -> swipeDownLabel
+                else -> null
             }
 
             // 长按选项
