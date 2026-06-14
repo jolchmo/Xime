@@ -278,6 +278,20 @@ object SettingsPreferences {
     fun setSwipeDownHintsEnabled(context: Context, enabled: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_SWIPE_DOWN_HINTS_ENABLED, enabled).apply()
     }
+
+    // 下滑提示三态：0=隐藏 1=功能(复制/全选/粘贴…) 2=字根优先(无字根回退功能)。默认 2，与作者一致。
+    const val KEY_SWIPE_DOWN_MODE = "swipe_down_mode"
+    fun getSwipeDownMode(context: Context): Int {
+        val p = getPrefs(context)
+        return if (p.contains(KEY_SWIPE_DOWN_MODE)) p.getInt(KEY_SWIPE_DOWN_MODE, 2)
+        else if (isSwipeDownHintsEnabled(context)) 2 else 0
+    }
+    fun setSwipeDownMode(context: Context, mode: Int) {
+        getPrefs(context).edit()
+            .putInt(KEY_SWIPE_DOWN_MODE, mode)
+            .putBoolean(KEY_SWIPE_DOWN_HINTS_ENABLED, mode != 0)
+            .apply()
+    }
     
     fun getKeyboardHeightDp(context: Context): Int {
         return getPrefs(context).getInt(KEY_KEYBOARD_HEIGHT_DP, DEFAULT_KEYBOARD_HEIGHT_DP)
@@ -300,6 +314,63 @@ object SettingsPreferences {
     }
     
     fun getDefaultKeyboardHeightDp(): Int = DEFAULT_KEYBOARD_HEIGHT_DP
+
+    // ── 键盘布局编辑器 ──（按键外观/阴影沿用维护者系统，这里只管尺寸/功能键/数字行/字根）
+    const val KEY_KEYBOARD_SIDE_PADDING_DP = "keyboard_side_padding_dp"
+    const val DEFAULT_KEYBOARD_SIDE_PADDING_DP = 4
+    fun getKeyboardSidePaddingDp(context: Context): Int =
+        getPrefs(context).getInt(KEY_KEYBOARD_SIDE_PADDING_DP, DEFAULT_KEYBOARD_SIDE_PADDING_DP)
+    fun setKeyboardSidePaddingDp(context: Context, v: Int) { getPrefs(context).edit().putInt(KEY_KEYBOARD_SIDE_PADDING_DP, v).apply() }
+
+    // 可换位功能键(CSV)：P0 emoji、P1 123、P2 逗号、P4 中；空格/回车结构性不在内。分隔符 ASCII 逗号≠中文「，」
+    const val KEY_FUNCTION_KEYS = "keyboard_function_keys"
+    const val DEFAULT_FUNCTION_KEYS = "emoji,mode_change,，,ime_switch"
+    fun getFunctionKeys(context: Context): List<String> {
+        val raw = getPrefs(context).getString(KEY_FUNCTION_KEYS, DEFAULT_FUNCTION_KEYS) ?: DEFAULT_FUNCTION_KEYS
+        return raw.split(",").filter { it.isNotEmpty() }
+    }
+    fun setFunctionKeys(context: Context, keys: List<String>) { getPrefs(context).edit().putString(KEY_FUNCTION_KEYS, keys.joinToString(",")).apply() }
+
+    // 布局编辑器：预览区是否折叠（折叠后只用测试框看真实键盘）
+    const val KEY_EDITOR_PREVIEW_COLLAPSED = "editor_preview_collapsed"
+    fun isEditorPreviewCollapsed(context: Context): Boolean = getPrefs(context).getBoolean(KEY_EDITOR_PREVIEW_COLLAPSED, false)
+    fun setEditorPreviewCollapsed(context: Context, v: Boolean) { getPrefs(context).edit().putBoolean(KEY_EDITOR_PREVIEW_COLLAPSED, v).apply() }
+
+    // 底排控制行左侧功能键数：2（默认，与作者一致）或 3（接近 Gboard：?123 ， 语音）
+    const val KEY_BOTTOM_LEFT_COUNT = "keyboard_bottom_left_count"
+    fun getBottomLeftCount(context: Context): Int = getPrefs(context).getInt(KEY_BOTTOM_LEFT_COUNT, 2).coerceIn(2, 3)
+    fun setBottomLeftCount(context: Context, v: Int) { getPrefs(context).edit().putInt(KEY_BOTTOM_LEFT_COUNT, v).apply() }
+
+    const val KEY_NUMBER_ROW_ENABLED = "keyboard_number_row_enabled"
+    fun isNumberRowEnabled(context: Context): Boolean = getPrefs(context).getBoolean(KEY_NUMBER_ROW_ENABLED, false)
+    fun setNumberRowEnabled(context: Context, v: Boolean) { getPrefs(context).edit().putBoolean(KEY_NUMBER_ROW_ENABLED, v).apply() }
+
+    // 字母键独立高/宽：内边距(变小留缝)，独立于整体键盘高度
+    const val KEY_H_INSET_DP = "key_h_inset_dp"
+    const val KEY_V_INSET_DP = "key_v_inset_dp"
+    fun getKeyHInsetDp(context: Context): Int = getPrefs(context).getInt(KEY_H_INSET_DP, 0)
+    fun setKeyHInsetDp(context: Context, v: Int) { getPrefs(context).edit().putInt(KEY_H_INSET_DP, v).apply() }
+    fun getKeyVInsetDp(context: Context): Int = getPrefs(context).getInt(KEY_V_INSET_DP, 0)
+    fun setKeyVInsetDp(context: Context, v: Int) { getPrefs(context).edit().putInt(KEY_V_INSET_DP, v).apply() }
+
+    // 按键外观：阴影开关/强度、圆角。覆盖 xime.yaml 的 keyboard.shadow（未设置时回退到传入的 asset 默认值）
+    const val KEY_SHADOW_ENABLED = "key_shadow_enabled"
+    const val KEY_SHADOW_ELEVATION_DP = "key_shadow_elevation_dp"
+    const val KEY_CORNER_RADIUS_DP = "key_corner_radius_dp"
+    fun isKeyShadowEnabled(context: Context, default: Boolean): Boolean =
+        getPrefs(context).getBoolean(KEY_SHADOW_ENABLED, default)
+    fun setKeyShadowEnabled(context: Context, v: Boolean) { getPrefs(context).edit().putBoolean(KEY_SHADOW_ENABLED, v).apply() }
+    fun getKeyShadowElevationDp(context: Context, default: Int): Int =
+        getPrefs(context).getInt(KEY_SHADOW_ELEVATION_DP, default)
+    fun setKeyShadowElevationDp(context: Context, v: Int) { getPrefs(context).edit().putInt(KEY_SHADOW_ELEVATION_DP, v).apply() }
+    fun getKeyCornerRadiusDp(context: Context, default: Int): Int =
+        getPrefs(context).getInt(KEY_CORNER_RADIUS_DP, default)
+    fun setKeyCornerRadiusDp(context: Context, v: Int) { getPrefs(context).edit().putInt(KEY_CORNER_RADIUS_DP, v).apply() }
+
+    // 字根代替键面字母：仓颉/速成下键面主字显示字根(日/月/金…)
+    const val KEY_RADICAL_AS_LABEL = "key_radical_as_label"
+    fun isRadicalAsLabel(context: Context): Boolean = getPrefs(context).getBoolean(KEY_RADICAL_AS_LABEL, false)
+    fun setRadicalAsLabel(context: Context, v: Boolean) { getPrefs(context).edit().putBoolean(KEY_RADICAL_AS_LABEL, v).apply() }
 
     fun getOrientationDefaultKeyboardHeightDp(context: Context, isLandscape: Boolean): Int {
         val key = if (isLandscape) KEY_KEYBOARD_HEIGHT_DP_LANDSCAPE else KEY_KEYBOARD_HEIGHT_DP
