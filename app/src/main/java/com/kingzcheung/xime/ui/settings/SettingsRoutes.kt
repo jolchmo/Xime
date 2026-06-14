@@ -8,6 +8,7 @@ object SettingsRoutes {
     const val Theme = "theme"
     const val KeyEffect = "key_effect"
     const val LayoutDisplay = "layout_display"
+    const val LayoutEditor = "layout_editor"
     const val Dictionary = "dictionary"
     const val Plugins = "plugins"
     const val PluginSettings = "plugin_settings"
