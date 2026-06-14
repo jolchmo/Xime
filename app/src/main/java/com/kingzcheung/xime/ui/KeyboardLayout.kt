@@ -28,6 +28,7 @@ import androidx.compose.material.icons.automirrored.filled.Backspace
 import androidx.compose.material.icons.filled.EmojiEmotions
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.twotone.EmojiEmotions
+import androidx.compose.material.icons.twotone.KeyboardCapslock
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -74,6 +75,138 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.TextUnit
 
+/** 标准仓颉字根（A-Y）。仓颉与速成（简化仓颉）共用。 */
+internal val CANGJIE_RADICALS = mapOf(
+    "a" to "日", "b" to "月", "c" to "金", "d" to "木", "e" to "水", "f" to "火",
+    "g" to "土", "h" to "竹", "i" to "戈", "j" to "十", "k" to "大", "l" to "中",
+    "m" to "一", "n" to "弓", "o" to "人", "p" to "心", "q" to "手", "r" to "口",
+    "s" to "尸", "t" to "廿", "u" to "山", "v" to "女", "w" to "田", "x" to "難",
+    "y" to "卜"
+)
+
+/** 当前方案是否仓颉/速成系（需显示仓颉字根）。 */
+internal fun isCangjieFamily(schemaId: String): Boolean {
+    val s = schemaId.lowercase()
+    return s.contains("cangjie") || s.contains("quick") || s.contains("sucheng") ||
+        schemaId.contains("仓颉") || schemaId.contains("速成")
+}
+
+/** 数字行：1-0，开启「数字行」时渲染在 QWERTY 上方。中英文共用，透传阴影。 */
+@Composable
+internal fun NumberRow(
+    onKeyPress: (String) -> Unit,
+    onKeyPressDown: ((String) -> Unit)?,
+    keyBackgroundColor: Color,
+    keyTextColor: Color,
+    shadowEnabled: Boolean = true,
+    shadowElevation: Dp = 1.dp,
+    shadowShapeRadius: Dp = 8.dp,
+    modifier: Modifier = Modifier
+) {
+    Row(modifier = modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "0").forEach { d ->
+            KeyButton(
+                text = d, onClick = { onKeyPress(d) },
+                backgroundColor = keyBackgroundColor, textColor = keyTextColor,
+                modifier = Modifier.weight(1f), onPress = { onKeyPressDown?.invoke(d) },
+                shadowEnabled = shadowEnabled, shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius
+            )
+        }
+    }
+}
+
+/**
+ * 可换位功能键：按 token 渲染（emoji/mode_change(?123)/ime_switch(中·英)/shift/voice/delete/标点/自定义），
+ * 透传阴影参数以与维护者按键一致；mode_change 保留长按切符号。
+ */
+@Composable
+internal fun FunctionKey(
+    token: String,
+    modifier: Modifier,
+    onKeyPress: (String) -> Unit,
+    onKeyPressDown: ((String) -> Unit)?,
+    keyBackgroundColor: Color,
+    specialKeyBackgroundColor: Color,
+    keyTextColor: Color,
+    onSwipeStateChange: (SwipeState, Rect) -> Unit,
+    isShifted: Boolean = false,
+    isEnglish: Boolean = false,
+    shadowEnabled: Boolean = true,
+    shadowElevation: Dp = 1.dp,
+    shadowShapeRadius: Dp = 8.dp
+) {
+    when (token) {
+        "emoji" -> IconKeyButton(
+            icon = rememberVectorPainter(Icons.TwoTone.EmojiEmotions),
+            onClick = { onKeyPress("emoji") }, backgroundColor = specialKeyBackgroundColor,
+            iconColor = keyTextColor, modifier = modifier, onPress = { onKeyPressDown?.invoke("emoji") },
+            shadowEnabled = shadowEnabled, shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius
+        )
+
+        "mode_change" -> KeyButton(
+            text = "?123", onClick = { onKeyPress("mode_change") },
+            onLongClick = { onKeyPress("mode_change_symbol") },
+            backgroundColor = specialKeyBackgroundColor, textColor = keyTextColor, modifier = modifier,
+            onPress = { onKeyPressDown?.invoke("mode_change") },
+            shadowEnabled = shadowEnabled, shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius
+        )
+
+        "ime_switch" -> KeyButton(
+            text = if (isEnglish) "英" else "中", onClick = { onKeyPress("ime_switch") },
+            backgroundColor = specialKeyBackgroundColor, textColor = keyTextColor, modifier = modifier,
+            onPress = { onKeyPressDown?.invoke("ime_switch") },
+            shadowEnabled = shadowEnabled, shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius
+        )
+
+        "shift" -> IconKeyButton(
+            icon = rememberVectorPainter(Icons.TwoTone.KeyboardCapslock),
+            onClick = { onKeyPress("shift") }, backgroundColor = specialKeyBackgroundColor,
+            iconColor = keyTextColor, modifier = modifier, isHighlighted = isShifted,
+            onPress = { onKeyPressDown?.invoke("shift") },
+            shadowEnabled = shadowEnabled, shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius
+        )
+
+        "voice" -> IconKeyButton(
+            icon = rememberVectorPainter(Icons.Default.Mic),
+            onClick = { onKeyPress("voice") }, backgroundColor = specialKeyBackgroundColor,
+            iconColor = keyTextColor, modifier = modifier, onPress = { onKeyPressDown?.invoke("voice") },
+            shadowEnabled = shadowEnabled, shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius
+        )
+
+        "delete" -> IconKeyButton(
+            icon = rememberVectorPainter(Icons.AutoMirrored.Filled.Backspace),
+            onClick = { onKeyPress("delete") }, backgroundColor = specialKeyBackgroundColor,
+            iconColor = keyTextColor, modifier = modifier, onPress = { onKeyPressDown?.invoke("delete") },
+            shadowEnabled = shadowEnabled, shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius
+        )
+
+        "，", "。", "、" -> {
+            // 逗号长按 → 表情；句号长按 → 更多符号（接近 Gboard）
+            val punctLongClick: (() -> Unit)? = when (token) {
+                "，" -> { { onKeyPress("emoji") } }
+                "。" -> { { onKeyPress("mode_change_symbol") } }
+                else -> null
+            }
+            SwipeableKeyButton(
+                text = token, onClick = { onKeyPress(token) },
+                backgroundColor = keyBackgroundColor, textColor = keyTextColor, modifier = modifier,
+                swipeText = if (token == "，") "。" else "，",
+                onSwipe = { swiped -> onKeyPress(swiped) }, onSwipeStateChange = onSwipeStateChange,
+                onPress = { onKeyPressDown?.invoke(token) },
+                onLongClick = punctLongClick,
+                shadowEnabled = shadowEnabled, shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius
+            )
+        }
+
+        else -> KeyButton(
+            text = token, onClick = { onKeyPress(token) },
+            backgroundColor = keyBackgroundColor, textColor = keyTextColor, modifier = modifier,
+            onPress = { onKeyPressDown?.invoke(token) },
+            shadowEnabled = shadowEnabled, shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius
+        )
+    }
+}
+
 @Composable
 fun KeyboardLayout(
     onKeyPress: (String) -> Unit,
@@ -108,12 +241,18 @@ fun KeyboardLayout(
         )
     }
     var swipeDownHintsEnabled by remember {
-        mutableStateOf(
-            SettingsPreferences.isSwipeDownHintsEnabled(
-                context
-            )
-        )
+        mutableStateOf(SettingsPreferences.getSwipeDownMode(context) != 0)
     }
+    // 下滑提示三态：true=字根优先(mode 2)；false=强制功能(mode 1)。隐藏由 swipeDownHintsEnabled=false 表示。
+    var swipeDownRadicalEnabled by remember {
+        mutableStateOf(SettingsPreferences.getSwipeDownMode(context) == 2)
+    }
+    // 布局编辑器：键宽边距 / 功能键 / 数字行 / 字根代替字母 / 底排左侧键数
+    var sidePaddingDp by remember { mutableStateOf(SettingsPreferences.getKeyboardSidePaddingDp(context)) }
+    var functionTokens by remember { mutableStateOf(SettingsPreferences.getFunctionKeys(context)) }
+    var numberRowEnabled by remember { mutableStateOf(SettingsPreferences.isNumberRowEnabled(context)) }
+    var radicalAsLabel by remember { mutableStateOf(SettingsPreferences.isRadicalAsLabel(context)) }
+    var bottomLeftCount by remember { mutableStateOf(SettingsPreferences.getBottomLeftCount(context)) }
 
     // 监听设置变化
     DisposableEffect(context) {
@@ -124,8 +263,23 @@ fun KeyboardLayout(
                     SettingsPreferences.KEY_SWIPE_UP_HINTS_ENABLED ->
                         swipeUpHintsEnabled = SettingsPreferences.isSwipeUpHintsEnabled(context)
 
-                    SettingsPreferences.KEY_SWIPE_DOWN_HINTS_ENABLED ->
-                        swipeDownHintsEnabled = SettingsPreferences.isSwipeDownHintsEnabled(context)
+                    SettingsPreferences.KEY_SWIPE_DOWN_HINTS_ENABLED,
+                    SettingsPreferences.KEY_SWIPE_DOWN_MODE -> {
+                        swipeDownHintsEnabled = SettingsPreferences.getSwipeDownMode(context) != 0
+                        swipeDownRadicalEnabled = SettingsPreferences.getSwipeDownMode(context) == 2
+                    }
+
+                    SettingsPreferences.KEY_BOTTOM_LEFT_COUNT ->
+                        bottomLeftCount = SettingsPreferences.getBottomLeftCount(context)
+
+                    SettingsPreferences.KEY_KEYBOARD_SIDE_PADDING_DP ->
+                        sidePaddingDp = SettingsPreferences.getKeyboardSidePaddingDp(context)
+                    SettingsPreferences.KEY_FUNCTION_KEYS ->
+                        functionTokens = SettingsPreferences.getFunctionKeys(context)
+                    SettingsPreferences.KEY_NUMBER_ROW_ENABLED ->
+                        numberRowEnabled = SettingsPreferences.isNumberRowEnabled(context)
+                    SettingsPreferences.KEY_RADICAL_AS_LABEL ->
+                        radicalAsLabel = SettingsPreferences.isRadicalAsLabel(context)
                 }
             }
         prefs.registerOnSharedPreferenceChangeListener(listener)
@@ -158,6 +312,11 @@ fun KeyboardLayout(
             bottom = bounds.bottom - keyboardBounds.top
         )
     }
+
+    // 仓颉/速成：字根（同时用 id 与显示名判断，市场方案 id 可能不规范）
+    val isCangjieSchema = isCangjieFamily(currentSchemaId) || isCangjieFamily(schemaName)
+    val cangjieRadicalFor: (String) -> String? = { k -> if (isCangjieSchema) CANGJIE_RADICALS[k.lowercase()] else null }
+    val mainLabelFor: (String) -> String? = { k -> if (radicalAsLabel && isCangjieSchema) CANGJIE_RADICALS[k.lowercase()] else null }
 
     Box(
         modifier = modifier
@@ -193,7 +352,7 @@ fun KeyboardLayout(
                     .fillMaxWidth()
                     .fillMaxHeight()
                     .background(keyboardBackgroundColor)
-                    .padding(vertical = 8.dp, horizontal = 4.dp)
+                    .padding(vertical = 8.dp, horizontal = (LocalKeyboardSidePadding.current ?: sidePaddingDp).dp)
             ) {
 
                 Column(
@@ -202,6 +361,20 @@ fun KeyboardLayout(
                         .weight(1f),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
+                    // 数字行（可选）
+                    if (numberRowEnabled && !isVoiceMode) {
+                        Box(modifier = Modifier.weight(0.8f)) {
+                            NumberRow(
+                                onKeyPress = onKeyPress,
+                                onKeyPressDown = onKeyPressDown,
+                                keyBackgroundColor = keyBackgroundColor,
+                                keyTextColor = keyTextColor,
+                                shadowEnabled = shadowEnabled,
+                                shadowElevation = shadowElevation,
+                                shadowShapeRadius = shadowShapeRadius
+                            )
+                        }
+                    }
                     // 第一行
                     if (isVoiceMode) {
                         Box(modifier = Modifier.weight(1f)) {
@@ -228,12 +401,15 @@ fun KeyboardLayout(
                                 },
                                 onKeyPressDown = onKeyPressDown,
                                 swipeDownHintsEnabled = swipeDownHintsEnabled,
+                                swipeDownRadicalEnabled = swipeDownRadicalEnabled,
                                 swipeUpHintsEnabled = swipeUpHintsEnabled,
                                 onCommitText = onCommitText,
                                 configVersion = cfgVer,
                                 shadowEnabled = shadowEnabled,
                                 shadowElevation = shadowElevation,
                                 shadowShapeRadius = shadowShapeRadius,
+                                radicalFor = cangjieRadicalFor,
+                                mainLabelOverride = mainLabelFor,
                             )
                         }
                     }
@@ -269,12 +445,15 @@ fun KeyboardLayout(
                                 },
                                 onKeyPressDown = onKeyPressDown,
                                 swipeDownHintsEnabled = swipeDownHintsEnabled,
+                                swipeDownRadicalEnabled = swipeDownRadicalEnabled,
                                 swipeUpHintsEnabled = swipeUpHintsEnabled,
                                 onCommitText = onCommitText,
                                 configVersion = cfgVer,
                                 shadowEnabled = shadowEnabled,
                                 shadowElevation = shadowElevation,
                                 shadowShapeRadius = shadowShapeRadius,
+                                radicalFor = cangjieRadicalFor,
+                                mainLabelOverride = mainLabelFor,
                             )
                         }
                     }
@@ -296,18 +475,19 @@ fun KeyboardLayout(
                                 .background(keyboardBackgroundColor),
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            IconKeyButton(
-                                icon = rememberVectorPainter(Icons.TwoTone.EmojiEmotions),
-                                onClick = { onKeyPress("emoji") },
-                                backgroundColor = specialKeyBackgroundColor,
-                                iconColor = keyTextColor,
-                                modifier = Modifier
-                                    .width(40.dp)
-                                    .fillMaxHeight(),
-                                onPress = { onKeyPressDown?.invoke("emoji") },
+                            FunctionKey(
+                                token = functionTokens.getOrElse(0) { "emoji" },
+                                modifier = Modifier.width(40.dp).fillMaxHeight(),
+                                onKeyPress = onKeyPress,
+                                onKeyPressDown = onKeyPressDown,
+                                keyBackgroundColor = keyBackgroundColor,
+                                specialKeyBackgroundColor = specialKeyBackgroundColor,
+                                keyTextColor = keyTextColor,
+                                onSwipeStateChange = { state, bounds -> processSwipeState(state, bounds) },
+                                isShifted = isShifted,
                                 shadowEnabled = shadowEnabled,
                                 shadowElevation = shadowElevation,
-                                shadowShapeRadius = shadowShapeRadius,
+                                shadowShapeRadius = shadowShapeRadius
                             )
 
                             Row(
@@ -329,8 +509,17 @@ fun KeyboardLayout(
                                     val swipeDownAction = swipeDownRaw?.action
                                     val swipeDownValue = swipeDownRaw?.value
                                     val swipeDownDisplay = swipeDownRaw?.display ?: "key"
+                                    val radicalOverride = cangjieRadicalFor(key)
                                     val swipeDownBubbleText =
-                                        if (swipeDownDisplay != "key") swipeDownLabel else null
+                                        if (radicalOverride == null && swipeDownDisplay != "key") swipeDownLabel else null
+                                    // 仓颉/速成字根静态显示在键面；字根代替模式则字根作主标签、不再小字
+                                    val swipeDownStaticLabel = when {
+                                        mainLabelFor(key) != null -> null
+                                        !swipeDownHintsEnabled -> null
+                                        radicalOverride != null && swipeDownRadicalEnabled -> radicalOverride
+                                        swipeDownDisplay == "key" -> swipeDownLabel
+                                        else -> null
+                                    }
 
                                     val longPressConfig =
                                         KeysConfigHelper.getKeyGesture(key)?.longPress
@@ -343,8 +532,8 @@ fun KeyboardLayout(
                                         longPressConfig?.values?.associateBy { it.label }
                                     } else null
 
-                                    // 键帽显示文本：中文模式始终显示大写
-                                    val displayText = key.uppercase()
+                                    // 键帽显示文本：字根代替模式显示字根，否则大写字母
+                                    val displayText = mainLabelFor(key) ?: key.uppercase()
 
                                     SwipeableKeyButton(
                                         text = displayText,
@@ -354,9 +543,9 @@ fun KeyboardLayout(
                                         modifier = Modifier.weight(1f),
                                         swipeText = swipeUpText,
                                         swipeDownText = swipeDownBubbleText,
-                                        swipeDownKeyLabel = if (swipeDownDisplay == "key") swipeDownLabel else null,
+                                        swipeDownKeyLabel = swipeDownStaticLabel,
                                         onSwipe = if (swipeUpText != null) onKeyPress else null,
-                                        onSwipeDown = if (swipeDownAction != null && swipeDownLabel != null) {
+                                        onSwipeDown = if (swipeDownAction != null && swipeDownHintsEnabled && swipeDownLabel != null) {
                                             val label = swipeDownLabel
                                             { _ ->
                                                 if (swipeDownAction == GestureAction.COMMIT) {
@@ -441,38 +630,44 @@ fun KeyboardLayout(
                                 modifier = Modifier.weight(0.8f)
                             )
                         } else {
-                            KeyButton(
-                                text = "?123",
-                                onClick = { onKeyPress("mode_change") },
-                                onLongClick = { onKeyPress("mode_change_symbol") },
-                                backgroundColor = specialKeyBackgroundColor,
-                                textColor = keyTextColor,
+                            FunctionKey(
+                                token = functionTokens.getOrElse(1) { "mode_change" },
                                 modifier = Modifier.weight(1.2f),
-                                onPress = { onKeyPressDown?.invoke("mode_change") },
-                                shadowEnabled = shadowEnabled,
-                                shadowElevation = shadowElevation,
-                                shadowShapeRadius = shadowShapeRadius,
+                                onKeyPress = onKeyPress, onKeyPressDown = onKeyPressDown,
+                                keyBackgroundColor = keyBackgroundColor,
+                                specialKeyBackgroundColor = specialKeyBackgroundColor,
+                                keyTextColor = keyTextColor,
+                                onSwipeStateChange = { state, bounds -> processSwipeState(state, bounds) },
+                                isShifted = isShifted,
+                                shadowEnabled = shadowEnabled, shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius
                             )
 
-                            SwipeableKeyButton(
-                                text = "，",
-                                onClick = { onKeyPress("，") },
-                                backgroundColor = keyBackgroundColor,
-                                textColor = keyTextColor,
+                            FunctionKey(
+                                token = functionTokens.getOrElse(2) { "，" },
                                 modifier = Modifier.weight(0.8f),
-                                swipeText = "。",
-                                onSwipe = { onSwipeText -> onKeyPress(onSwipeText) },
-                                onSwipeStateChange = { state, bounds ->
-                                    processSwipeState(
-                                        state,
-                                        bounds
-                                    )
-                                },
-                                onPress = { onKeyPressDown?.invoke("。") },
-                                shadowEnabled = shadowEnabled,
-                                shadowElevation = shadowElevation,
-                                shadowShapeRadius = shadowShapeRadius,
+                                onKeyPress = onKeyPress, onKeyPressDown = onKeyPressDown,
+                                keyBackgroundColor = keyBackgroundColor,
+                                specialKeyBackgroundColor = specialKeyBackgroundColor,
+                                keyTextColor = keyTextColor,
+                                onSwipeStateChange = { state, bounds -> processSwipeState(state, bounds) },
+                                isShifted = isShifted,
+                                shadowEnabled = shadowEnabled, shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius
                             )
+
+                            // 第三个左侧功能键（仅当底排左侧键数=3，接近 Gboard）
+                            if (bottomLeftCount >= 3) {
+                                FunctionKey(
+                                    token = functionTokens.getOrElse(4) { "voice" },
+                                    modifier = Modifier.weight(0.8f),
+                                    onKeyPress = onKeyPress, onKeyPressDown = onKeyPressDown,
+                                    keyBackgroundColor = keyBackgroundColor,
+                                    specialKeyBackgroundColor = specialKeyBackgroundColor,
+                                    keyTextColor = keyTextColor,
+                                    onSwipeStateChange = { state, bounds -> processSwipeState(state, bounds) },
+                                    isShifted = isShifted,
+                                    shadowEnabled = shadowEnabled, shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius
+                                )
+                            }
                         }
 
                         // 空格键 - 支持左右滑动控制光标、长按语音
@@ -485,6 +680,8 @@ fun KeyboardLayout(
                             modifier = Modifier
                                 .weight(3f)
                                 .fillMaxHeight()
+                                // 与字母键一致地应用按键背景留白(inset)，否则空格会比其它键大
+                                .padding(horizontal = LocalKeyInsetH.current.dp, vertical = LocalKeyInsetV.current.dp)
                                 .then(
                                     if (shadowEnabled) Modifier.shadow(shadowElevation, RoundedCornerShape(shadowShapeRadius), ambientColor = Color(0x80000000), spotColor = Color(0x80000000))
                                     else Modifier
@@ -620,16 +817,16 @@ fun KeyboardLayout(
                                 modifier = Modifier.weight(1.2f)
                             )
                         } else {
-                            KeyButton(
-                                text = "中",
-                                onClick = { onKeyPress("ime_switch") },
-                                backgroundColor = specialKeyBackgroundColor,
-                                textColor = keyTextColor,
+                            FunctionKey(
+                                token = functionTokens.getOrElse(3) { "ime_switch" },
                                 modifier = Modifier.weight(0.8f),
-                                onPress = { onKeyPressDown?.invoke("ime_switch") },
-                                shadowEnabled = shadowEnabled,
-                                shadowElevation = shadowElevation,
-                                shadowShapeRadius = shadowShapeRadius,
+                                onKeyPress = onKeyPress, onKeyPressDown = onKeyPressDown,
+                                keyBackgroundColor = keyBackgroundColor,
+                                specialKeyBackgroundColor = specialKeyBackgroundColor,
+                                keyTextColor = keyTextColor,
+                                onSwipeStateChange = { state, bounds -> processSwipeState(state, bounds) },
+                                isShifted = isShifted,
+                                shadowEnabled = shadowEnabled, shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius
                             )
 
                             KeyButton(
@@ -758,6 +955,7 @@ fun KeyboardRowWithConfig(
     onSwipeStateChange: ((SwipeState, Rect) -> Unit)? = null,
     onKeyPressDown: ((String) -> Unit)? = null,
     swipeDownHintsEnabled: Boolean = true,
+    swipeDownRadicalEnabled: Boolean = true,
     swipeUpHintsEnabled: Boolean = true,
     onCommitText: ((String) -> Unit)? = null,
     onGestureAction: ((GestureAction, String) -> Unit)? = null,
@@ -767,6 +965,8 @@ fun KeyboardRowWithConfig(
     shadowEnabled: Boolean = true,
     shadowElevation: Dp = 1.dp,
     shadowShapeRadius: Dp = 8.dp,
+    radicalFor: ((String) -> String?)? = null,
+    mainLabelOverride: ((String) -> String?)? = null,
 ) {
     Row(
         modifier = modifier
@@ -782,8 +982,17 @@ fun KeyboardRowWithConfig(
             val swipeDownAction = swipeDownRaw?.action
             val swipeDownValue = swipeDownRaw?.value
             val swipeDownDisplay = swipeDownRaw?.display ?: "key"
+            val radicalOverride = radicalFor?.invoke(key)
             val swipeDownBubbleText =
-                if (swipeDownDisplay != "key" && swipeDownHintsEnabled) swipeDownLabel else null
+                if (radicalOverride == null && swipeDownDisplay != "key" && swipeDownHintsEnabled) swipeDownLabel else null
+            // 仓颉/速成字根静态显示在键面；字根代替模式则字根作主标签
+            val swipeDownStaticLabel = when {
+                mainLabelOverride?.invoke(key) != null -> null
+                !swipeDownHintsEnabled -> null
+                radicalOverride != null && swipeDownRadicalEnabled -> radicalOverride
+                swipeDownDisplay == "key" -> swipeDownLabel
+                else -> null
+            }
 
             // 长按选项
             val longPressConfig = KeysConfigHelper.getKeyGesture(key)?.longPress
@@ -796,8 +1005,8 @@ fun KeyboardRowWithConfig(
                 longPressConfig?.values?.associateBy { it.label }
             } else null
 
-            // 键帽显示文本：中文模式始终显示大写
-            val displayText = key.uppercase()
+            // 键帽显示文本：字根代替模式显示字根，否则大写字母
+            val displayText = mainLabelOverride?.invoke(key) ?: key.uppercase()
             val commitValue = key
 
             SwipeableKeyButton(
@@ -808,7 +1017,7 @@ fun KeyboardRowWithConfig(
                 modifier = Modifier.weight(1f),
                 swipeText = swipeUpText,
                 swipeDownText = swipeDownBubbleText,
-                swipeDownKeyLabel = if (swipeDownDisplay == "key" && swipeDownHintsEnabled) swipeDownLabel else null,
+                swipeDownKeyLabel = swipeDownStaticLabel,
                 onSwipe = if (swipeUpText != null) onKeyPress else null,
                 onSwipeDown = if (swipeDownAction != null && swipeDownHintsEnabled && swipeDownLabel != null) {
                     val label = swipeDownLabel

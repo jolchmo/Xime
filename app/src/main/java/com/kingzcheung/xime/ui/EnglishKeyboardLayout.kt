@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.EmojiEmotions
 import androidx.compose.material.icons.twotone.KeyboardCapslock
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,11 +35,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.kingzcheung.xime.settings.SettingsPreferences
 import com.kingzcheung.xime.util.CharInfo
 
 /**
@@ -73,6 +76,26 @@ fun EnglishKeyboardLayout(
         "z" to "*", "x" to "@", "c" to "&", "v" to "?", "b" to "!",
         "n" to "/", "m" to "_"
     )
+
+    // 与中文键盘同步：键宽边距 / 数字行 / 功能键
+    val context = LocalContext.current
+    var sidePaddingDp by remember { mutableStateOf(SettingsPreferences.getKeyboardSidePaddingDp(context)) }
+    var numberRowEnabled by remember { mutableStateOf(SettingsPreferences.isNumberRowEnabled(context)) }
+    var functionTokens by remember { mutableStateOf(SettingsPreferences.getFunctionKeys(context)) }
+    var bottomLeftCount by remember { mutableStateOf(SettingsPreferences.getBottomLeftCount(context)) }
+    DisposableEffect(context) {
+        val prefs = SettingsPreferences.getPrefsPublic(context)
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            when (key) {
+                SettingsPreferences.KEY_KEYBOARD_SIDE_PADDING_DP -> sidePaddingDp = SettingsPreferences.getKeyboardSidePaddingDp(context)
+                SettingsPreferences.KEY_NUMBER_ROW_ENABLED -> numberRowEnabled = SettingsPreferences.isNumberRowEnabled(context)
+                SettingsPreferences.KEY_FUNCTION_KEYS -> functionTokens = SettingsPreferences.getFunctionKeys(context)
+                SettingsPreferences.KEY_BOTTOM_LEFT_COUNT -> bottomLeftCount = SettingsPreferences.getBottomLeftCount(context)
+            }
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
 
     var swipeState by remember { mutableStateOf(SwipeState()) }
     var keyboardBounds by remember { mutableStateOf(Rect(0f, 0f, 0f, 0f)) }
@@ -120,12 +143,26 @@ fun EnglishKeyboardLayout(
                     .fillMaxWidth()
                     .fillMaxHeight()
                     .background(keyboardBackgroundColor)
-                    .padding(vertical = 8.dp, horizontal = 4.dp)
+                    .padding(vertical = 8.dp, horizontal = sidePaddingDp.dp)
             ) {
                 Column(
                     modifier = Modifier.fillMaxWidth().weight(1f),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
+                    // 数字行（可选，与中文同步）
+                    if (numberRowEnabled) {
+                        Box(modifier = Modifier.weight(0.8f)) {
+                            NumberRow(
+                                onKeyPress = onKeyPress,
+                                onKeyPressDown = onKeyPressDown,
+                                keyBackgroundColor = keyBackgroundColor,
+                                keyTextColor = keyTextColor,
+                                shadowEnabled = shadowEnabled,
+                                shadowElevation = shadowElevation,
+                                shadowShapeRadius = shadowShapeRadius
+                            )
+                        }
+                    }
                     // 第一行
                     Box(modifier = Modifier.weight(1f)) {
                         Row(
@@ -257,31 +294,43 @@ fun EnglishKeyboardLayout(
                             .background(keyboardBackgroundColor),
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        KeyButton(
-                            text = "?123",
-                            onClick = { onKeyPress("mode_change") },
-                            onLongClick = { onKeyPress("mode_change_symbol") },
-                            backgroundColor = specialKeyBackgroundColor,
-                            textColor = keyTextColor,
+                        FunctionKey(
+                            token = functionTokens.getOrElse(1) { "mode_change" },
                             modifier = Modifier.weight(1.2f),
-                            onPress = { onKeyPressDown?.invoke("mode_change") },
-                            shadowEnabled = shadowEnabled,
-                            shadowElevation = shadowElevation,
-                            shadowShapeRadius = shadowShapeRadius,
+                            onKeyPress = onKeyPress, onKeyPressDown = onKeyPressDown,
+                            keyBackgroundColor = keyBackgroundColor,
+                            specialKeyBackgroundColor = specialKeyBackgroundColor,
+                            keyTextColor = keyTextColor,
+                            onSwipeStateChange = { state, bounds -> processSwipeState(state, bounds) },
+                            isShifted = isShifted, isEnglish = true,
+                            shadowEnabled = shadowEnabled, shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius
                         )
 
-                        // 标点键 .
-                        KeyButton(
-                            text = ".",
-                            onClick = { onKeyPress(".") },
-                            backgroundColor = keyBackgroundColor,
-                            textColor = keyTextColor,
+                        FunctionKey(
+                            token = functionTokens.getOrElse(2) { "，" },
                             modifier = Modifier.weight(0.8f),
-                            onPress = { onKeyPressDown?.invoke(".") },
-                            shadowEnabled = shadowEnabled,
-                            shadowElevation = shadowElevation,
-                            shadowShapeRadius = shadowShapeRadius,
+                            onKeyPress = onKeyPress, onKeyPressDown = onKeyPressDown,
+                            keyBackgroundColor = keyBackgroundColor,
+                            specialKeyBackgroundColor = specialKeyBackgroundColor,
+                            keyTextColor = keyTextColor,
+                            onSwipeStateChange = { state, bounds -> processSwipeState(state, bounds) },
+                            isShifted = isShifted, isEnglish = true,
+                            shadowEnabled = shadowEnabled, shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius
                         )
+
+                        if (bottomLeftCount >= 3) {
+                            FunctionKey(
+                                token = functionTokens.getOrElse(4) { "voice" },
+                                modifier = Modifier.weight(0.8f),
+                                onKeyPress = onKeyPress, onKeyPressDown = onKeyPressDown,
+                                keyBackgroundColor = keyBackgroundColor,
+                                specialKeyBackgroundColor = specialKeyBackgroundColor,
+                                keyTextColor = keyTextColor,
+                                onSwipeStateChange = { state, bounds -> processSwipeState(state, bounds) },
+                                isShifted = isShifted, isEnglish = true,
+                                shadowEnabled = shadowEnabled, shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius
+                            )
+                        }
 
                         // 空格键 — 使用 KeyButton 以获得震动/音效和按下效果
                         KeyButton(
@@ -297,16 +346,16 @@ fun EnglishKeyboardLayout(
                             shadowShapeRadius = shadowShapeRadius,
                         )
 
-                        KeyButton(
-                            text = "英",
-                            onClick = { onKeyPress("ime_switch") },
-                            backgroundColor = specialKeyBackgroundColor,
-                            textColor = keyTextColor,
+                        FunctionKey(
+                            token = functionTokens.getOrElse(3) { "ime_switch" },
                             modifier = Modifier.weight(0.8f),
-                            onPress = { onKeyPressDown?.invoke("ime_switch") },
-                            shadowEnabled = shadowEnabled,
-                            shadowElevation = shadowElevation,
-                            shadowShapeRadius = shadowShapeRadius,
+                            onKeyPress = onKeyPress, onKeyPressDown = onKeyPressDown,
+                            keyBackgroundColor = keyBackgroundColor,
+                            specialKeyBackgroundColor = specialKeyBackgroundColor,
+                            keyTextColor = keyTextColor,
+                            onSwipeStateChange = { state, bounds -> processSwipeState(state, bounds) },
+                            isShifted = isShifted, isEnglish = true,
+                            shadowEnabled = shadowEnabled, shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius
                         )
 
                         // 回车键
